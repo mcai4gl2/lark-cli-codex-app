@@ -33,6 +33,25 @@ type Config struct {
 		EventLog      string `mapstructure:"event_log"`
 		AutoReplyText string `mapstructure:"auto_reply_text"`
 	} `mapstructure:"gateway"`
+	Slack struct {
+		BotToken      string `mapstructure:"bot_token"`
+		AppToken      string `mapstructure:"app_token"`
+		SigningSecret string `mapstructure:"signing_secret"`
+		BotUserID     string `mapstructure:"bot_user_id"`
+		Gateway       struct {
+			EventLog      string `mapstructure:"event_log"`
+			AutoReplyText string `mapstructure:"auto_reply_text"`
+		} `mapstructure:"gateway"`
+		Agent struct {
+			Enabled        bool   `mapstructure:"enabled"`
+			CodexBinary    string `mapstructure:"codex_binary"`
+			Workspace      string `mapstructure:"workspace"`
+			Model          string `mapstructure:"model"`
+			AckText        string `mapstructure:"ack_text"`
+			ResultMaxChars int    `mapstructure:"result_max_chars"`
+			TimeoutMinutes int    `mapstructure:"timeout_minutes"`
+		} `mapstructure:"agent"`
+	} `mapstructure:"slack"`
 	Webhook struct {
 		ListenAddr        string `mapstructure:"listen_addr"`
 		Path              string `mapstructure:"path"`
@@ -89,6 +108,12 @@ func Init() error {
 	viper.SetDefault("agent.result_max_chars", 1800)
 	viper.SetDefault("agent.timeout_minutes", 20)
 	viper.SetDefault("gateway.event_log", filepath.Join(cfgDir, "gateway-events.jsonl"))
+	viper.SetDefault("slack.gateway.event_log", filepath.Join(rootDir, ".slack", "gateway-events.jsonl"))
+	viper.SetDefault("slack.agent.enabled", false)
+	viper.SetDefault("slack.agent.codex_binary", "codex")
+	viper.SetDefault("slack.agent.ack_text", "Received. Working on it.")
+	viper.SetDefault("slack.agent.result_max_chars", 3500)
+	viper.SetDefault("slack.agent.timeout_minutes", 20)
 	viper.SetDefault("webhook.listen_addr", "0.0.0.0:8080")
 	viper.SetDefault("webhook.path", "/webhook/feishu")
 	viper.SetDefault("webhook.event_log", filepath.Join(cfgDir, "webhook-events.jsonl"))
@@ -105,6 +130,19 @@ func Init() error {
 	viper.BindEnv("agent.timeout_minutes", "LARK_AGENT_TIMEOUT_MINUTES")
 	viper.BindEnv("gateway.event_log", "LARK_GATEWAY_EVENT_LOG")
 	viper.BindEnv("gateway.auto_reply_text", "LARK_GATEWAY_AUTO_REPLY_TEXT")
+	viper.BindEnv("slack.bot_token", "SLACK_BOT_TOKEN")
+	viper.BindEnv("slack.app_token", "SLACK_APP_TOKEN")
+	viper.BindEnv("slack.signing_secret", "SLACK_SIGNING_SECRET")
+	viper.BindEnv("slack.bot_user_id", "SLACK_BOT_USER_ID")
+	viper.BindEnv("slack.agent.enabled", "SLACK_AGENT_ENABLED")
+	viper.BindEnv("slack.agent.codex_binary", "SLACK_AGENT_CODEX_BINARY")
+	viper.BindEnv("slack.agent.workspace", "SLACK_AGENT_WORKSPACE")
+	viper.BindEnv("slack.agent.model", "SLACK_AGENT_MODEL")
+	viper.BindEnv("slack.agent.ack_text", "SLACK_AGENT_ACK_TEXT")
+	viper.BindEnv("slack.agent.result_max_chars", "SLACK_AGENT_RESULT_MAX_CHARS")
+	viper.BindEnv("slack.agent.timeout_minutes", "SLACK_AGENT_TIMEOUT_MINUTES")
+	viper.BindEnv("slack.gateway.event_log", "SLACK_GATEWAY_EVENT_LOG")
+	viper.BindEnv("slack.gateway.auto_reply_text", "SLACK_GATEWAY_AUTO_REPLY_TEXT")
 	viper.BindEnv("webhook.listen_addr", "LARK_WEBHOOK_LISTEN")
 	viper.BindEnv("webhook.path", "LARK_WEBHOOK_PATH")
 	viper.BindEnv("webhook.verification_token", "LARK_WEBHOOK_TOKEN")
@@ -236,6 +274,90 @@ func GetGatewayEventLogPath() string {
 // GetGatewayAutoReplyText returns the optional static auto-reply text.
 func GetGatewayAutoReplyText() string {
 	return viper.GetString("gateway.auto_reply_text")
+}
+
+// GetSlackBotToken returns the Slack bot token used for Web API calls.
+func GetSlackBotToken() string {
+	return strings.TrimSpace(viper.GetString("slack.bot_token"))
+}
+
+// GetSlackAppToken returns the Slack app-level token used for Socket Mode.
+func GetSlackAppToken() string {
+	return strings.TrimSpace(viper.GetString("slack.app_token"))
+}
+
+// GetSlackSigningSecret returns the Slack signing secret for future webhook mode.
+func GetSlackSigningSecret() string {
+	return strings.TrimSpace(viper.GetString("slack.signing_secret"))
+}
+
+// GetSlackBotUserID returns the optional Slack bot user ID.
+func GetSlackBotUserID() string {
+	return strings.TrimSpace(viper.GetString("slack.bot_user_id"))
+}
+
+// GetSlackGatewayEventLogPath returns the JSONL path used for Slack gateway persistence.
+func GetSlackGatewayEventLogPath() string {
+	path := strings.TrimSpace(viper.GetString("slack.gateway.event_log"))
+	if path == "" {
+		return filepath.Join(rootDir, ".slack", "gateway-events.jsonl")
+	}
+	if !filepath.IsAbs(path) {
+		return filepath.Join(rootDir, path)
+	}
+	return path
+}
+
+// GetSlackGatewayAutoReplyText returns the optional Slack gateway auto-reply text.
+func GetSlackGatewayAutoReplyText() string {
+	return viper.GetString("slack.gateway.auto_reply_text")
+}
+
+// GetSlackDesktopTaskRoot returns the Slack-specific desktop queue root.
+func GetSlackDesktopTaskRoot() string {
+	return filepath.Join(rootDir, ".slack", "desktop-tasks")
+}
+
+// GetSlackAgentEnabled returns whether Slack messages should dispatch to Codex.
+func GetSlackAgentEnabled() bool {
+	return viper.GetBool("slack.agent.enabled")
+}
+
+// GetSlackAgentCodexBinary returns the codex binary path or command name for Slack tasks.
+func GetSlackAgentCodexBinary() string {
+	return strings.TrimSpace(viper.GetString("slack.agent.codex_binary"))
+}
+
+// GetSlackAgentWorkspace returns the workspace root used for Slack Codex tasks.
+func GetSlackAgentWorkspace() string {
+	path := strings.TrimSpace(viper.GetString("slack.agent.workspace"))
+	if path != "" {
+		if !filepath.IsAbs(path) {
+			return filepath.Join(rootDir, path)
+		}
+		return path
+	}
+	return GetAgentWorkspace()
+}
+
+// GetSlackAgentModel returns the optional model override for Slack Codex tasks.
+func GetSlackAgentModel() string {
+	return strings.TrimSpace(viper.GetString("slack.agent.model"))
+}
+
+// GetSlackAgentAckText returns the Slack acknowledgement text.
+func GetSlackAgentAckText() string {
+	return viper.GetString("slack.agent.ack_text")
+}
+
+// GetSlackAgentResultMaxChars returns the maximum Slack reply length.
+func GetSlackAgentResultMaxChars() int {
+	return viper.GetInt("slack.agent.result_max_chars")
+}
+
+// GetSlackAgentTimeoutMinutes returns the maximum runtime for a Slack Codex task.
+func GetSlackAgentTimeoutMinutes() int {
+	return viper.GetInt("slack.agent.timeout_minutes")
 }
 
 // GetWebhookListenAddr returns the listen address for webhook server.

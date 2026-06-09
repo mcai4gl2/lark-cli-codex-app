@@ -336,17 +336,35 @@ Implementation notes:
 
 ### Phase 2: Slack Gateway MVP
 
-- Add Slack config and env bindings.
-- Add Slack Web API client for `chat.postMessage` and `auth.test`.
-- Add Slack Socket Mode client.
-- Normalize `app_mention` and `message.im` events.
-- Add `slack gateway serve` command.
-- Verify:
-  - DM triggers Codex.
-  - Channel mention triggers Codex.
-  - Replies land in the correct thread.
-  - Bot messages do not self-trigger.
-  - GUI request is queued and completion replies to the Slack thread.
+Status: Complete.
+
+- [x] Add Slack config and env bindings.
+- [x] Add Slack Web API client for `chat.postMessage` and `auth.test`.
+- [x] Add Slack Socket Mode client.
+- [x] Normalize `app_mention` and `message.im` events.
+- [x] Add `slack gateway serve` command.
+- [x] Verify with automated tests:
+  - [x] DM events normalize into shared inbound events.
+  - [x] Channel mentions normalize into shared inbound events.
+  - [x] Replies target the correct Slack thread timestamp.
+  - [x] Bot/self messages do not self-trigger.
+  - [x] GUI requests are queued with Slack reply coordinates.
+
+Implementation notes:
+
+- Added Slack config/env support for `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_SIGNING_SECRET`, `SLACK_BOT_USER_ID`, Slack gateway settings, and Slack agent settings.
+- Added `.slack/` defaults for Slack event logs and desktop task state so existing `.lark/` state is untouched.
+- Added `internal/slack` with a minimal Web API client, event normalization, and Socket Mode gateway service.
+- Added `lark slack gateway serve` with agent, event-log, auto-reply, workspace, and desktop-worker flags.
+- Added tests for Slack config, Web API calls, event normalization, command registration, and desktop routing.
+- Verified with Docker-based `gofmt`, focused package tests, full `go test ./...`, and CLI build.
+
+Manual Slack workspace smoke tests remain to be run with real Slack app credentials:
+
+- DM triggers Codex.
+- Channel mention triggers Codex.
+- Replies land in the correct Slack thread.
+- GUI request completion replies to the Slack thread.
 
 ### Phase 3: Slack CLI Commands
 

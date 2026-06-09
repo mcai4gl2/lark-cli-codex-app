@@ -34,6 +34,28 @@ gateway:
   # Supported placeholders: {{text}}, {{chat_id}}, {{message_id}}, {{sender_open_id}}
   auto_reply_text: ""
 
+# Slack Socket Mode settings (optional)
+# Prefer setting secrets via SLACK_BOT_TOKEN and SLACK_APP_TOKEN.
+slack:
+  bot_token: ""
+  app_token: ""
+  signing_secret: ""
+  bot_user_id: ""
+  gateway:
+    # JSONL file that stores received Slack message events
+    event_log: ".slack/gateway-events.jsonl"
+    # Optional plain-text auto-reply template
+    # Supported placeholders: {{text}}, {{channel_id}}, {{thread_id}}, {{message_id}}, {{user_id}}
+    auto_reply_text: ""
+  agent:
+    enabled: false
+    codex_binary: "codex"
+    workspace: "~/WorkSpace"
+    model: ""
+    ack_text: "Received. Working on it."
+    result_max_chars: 3500
+    timeout_minutes: 20
+
 # Webhook settings for Feishu/Lark event subscriptions (optional)
 webhook:
   # Local listen address for `lark webhook serve`
