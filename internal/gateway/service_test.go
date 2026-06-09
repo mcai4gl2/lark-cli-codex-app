@@ -50,11 +50,17 @@ func TestBuildLoggedEventFromWebSocketEvent(t *testing.T) {
 	if entry.MessageID != "om_123" {
 		t.Fatalf("unexpected message_id: %s", entry.MessageID)
 	}
+	if entry.Provider != "lark" {
+		t.Fatalf("unexpected provider: %s", entry.Provider)
+	}
+	if entry.ChannelID != "oc_123" {
+		t.Fatalf("unexpected channel id: %s", entry.ChannelID)
+	}
 	if entry.MessageText != "hello gateway" {
 		t.Fatalf("unexpected message text: %s", entry.MessageText)
 	}
-	if entry.SenderOpenID != "ou_123" {
-		t.Fatalf("unexpected sender open id: %s", entry.SenderOpenID)
+	if entry.UserID != "ou_123" {
+		t.Fatalf("unexpected user id: %s", entry.UserID)
 	}
 }
 

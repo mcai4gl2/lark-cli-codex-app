@@ -1,6 +1,7 @@
 package desktop
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,9 +11,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/yjwong/lark-cli/internal/api"
 	"github.com/yjwong/lark-cli/internal/config"
 	"github.com/yjwong/lark-cli/internal/inbound"
+	"github.com/yjwong/lark-cli/internal/larkbridge"
+	"github.com/yjwong/lark-cli/internal/platform"
 )
 
 const (
@@ -123,32 +125,40 @@ var desktopTargetKeywords = []string{
 
 // Task represents one queued desktop GUI request.
 type Task struct {
-	ID           string `json:"id"`
-	Status       string `json:"status"`
-	CreatedAt    string `json:"created_at"`
-	ClaimedAt    string `json:"claimed_at,omitempty"`
-	FinishedAt   string `json:"finished_at,omitempty"`
-	MessageID    string `json:"message_id"`
-	RootID       string `json:"root_id,omitempty"`
-	ChatID       string `json:"chat_id"`
-	SenderOpenID string `json:"sender_open_id,omitempty"`
-	SenderUserID string `json:"sender_user_id,omitempty"`
-	RequestText  string `json:"request_text"`
-	Result       string `json:"result,omitempty"`
-	Error        string `json:"error,omitempty"`
+	ID          string `json:"id"`
+	Status      string `json:"status"`
+	CreatedAt   string `json:"created_at"`
+	ClaimedAt   string `json:"claimed_at,omitempty"`
+	FinishedAt  string `json:"finished_at,omitempty"`
+	Provider    string `json:"provider"`
+	TeamID      string `json:"team_id,omitempty"`
+	ChannelID   string `json:"channel_id"`
+	ThreadID    string `json:"thread_id,omitempty"`
+	MessageID   string `json:"message_id"`
+	UserID      string `json:"user_id,omitempty"`
+	RequestText string `json:"request_text"`
+	Result      string `json:"result,omitempty"`
+	Error       string `json:"error,omitempty"`
 }
 
 // Queue stores pending and processed desktop tasks on disk.
 type Queue struct {
-	rootDir string
-	client  *api.Client
+	rootDir   string
+	messenger platform.Messenger
 }
 
 // NewQueue returns a persistent desktop task queue.
 func NewQueue(rootDir string) *Queue {
+	return NewQueueWithMessenger(rootDir, nil)
+}
+
+func NewQueueWithMessenger(rootDir string, messenger platform.Messenger) *Queue {
+	if messenger == nil {
+		messenger = larkbridge.NewMessenger(nil)
+	}
 	return &Queue{
-		rootDir: rootDir,
-		client:  api.NewClient(),
+		rootDir:   rootDir,
+		messenger: messenger,
 	}
 }
 
@@ -227,15 +237,16 @@ func (q *Queue) Enqueue(entry inbound.LoggedEvent, requestText string) (*Task, e
 	}
 
 	task := &Task{
-		ID:           uuid.NewString(),
-		Status:       statusPending,
-		CreatedAt:    time.Now().Format(time.RFC3339Nano),
-		MessageID:    entry.MessageID,
-		RootID:       entry.RootID,
-		ChatID:       entry.ChatID,
-		SenderOpenID: entry.SenderOpenID,
-		SenderUserID: entry.SenderUserID,
-		RequestText:  requestText,
+		ID:          uuid.NewString(),
+		Status:      statusPending,
+		CreatedAt:   time.Now().Format(time.RFC3339Nano),
+		Provider:    entry.Provider,
+		TeamID:      entry.TeamID,
+		ChannelID:   entry.ChannelID,
+		ThreadID:    entry.ThreadID,
+		MessageID:   entry.MessageID,
+		UserID:      entry.UserID,
+		RequestText: requestText,
 	}
 
 	if err := q.writeTask(filepath.Join(q.pendingDir(), task.ID+".json"), task); err != nil {
@@ -349,12 +360,15 @@ func (q *Queue) finishTask(id, status, result, errorText string) (*Task, error) 
 }
 
 func (q *Queue) reply(task *Task, text string) error {
-	content, err := json.Marshal(map[string]string{"text": strings.TrimSpace(text)})
-	if err != nil {
-		return fmt.Errorf("marshal task reply: %w", err)
+	event := platform.MessageEvent{
+		Provider:  task.Provider,
+		TeamID:    task.TeamID,
+		ChannelID: task.ChannelID,
+		ThreadID:  task.ThreadID,
+		MessageID: task.MessageID,
+		UserID:    task.UserID,
 	}
-	_, err = q.client.ReplyMessage(task.MessageID, "text", string(content), task.RootID, true)
-	return err
+	return q.messenger.Reply(context.Background(), event, strings.TrimSpace(text))
 }
 
 // Reply sends a reply to the originating Feishu message for a task.

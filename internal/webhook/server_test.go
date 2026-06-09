@@ -99,8 +99,20 @@ func TestHandleMessageEventWritesJSONL(t *testing.T) {
 	if entry.EventType != "im.message.receive_v1" {
 		t.Fatalf("unexpected event type: %s", entry.EventType)
 	}
+	if entry.Provider != "lark" {
+		t.Fatalf("unexpected provider: %s", entry.Provider)
+	}
 	if entry.MessageID != "om_123" {
 		t.Fatalf("unexpected message_id: %s", entry.MessageID)
+	}
+	if entry.ChannelID != "oc_123" {
+		t.Fatalf("unexpected channel_id: %s", entry.ChannelID)
+	}
+	if entry.ThreadID != "om_123" {
+		t.Fatalf("unexpected thread_id: %s", entry.ThreadID)
+	}
+	if entry.UserID != "ou_123" {
+		t.Fatalf("unexpected user_id: %s", entry.UserID)
 	}
 	if entry.MessageText != "hello webhook" {
 		t.Fatalf("unexpected message text: %s", entry.MessageText)

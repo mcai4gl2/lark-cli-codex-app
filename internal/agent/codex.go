@@ -10,8 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yjwong/lark-cli/internal/api"
 	"github.com/yjwong/lark-cli/internal/inbound"
+	"github.com/yjwong/lark-cli/internal/larkbridge"
+	"github.com/yjwong/lark-cli/internal/platform"
 )
 
 type Config struct {
@@ -25,12 +26,16 @@ type Config struct {
 }
 
 type Runner struct {
-	cfg    Config
-	client *api.Client
-	logger *log.Logger
+	cfg       Config
+	messenger platform.Messenger
+	logger    *log.Logger
 }
 
 func NewRunner(cfg Config, logger *log.Logger) *Runner {
+	return NewRunnerWithMessenger(cfg, logger, larkbridge.NewMessenger(nil))
+}
+
+func NewRunnerWithMessenger(cfg Config, logger *log.Logger, messenger platform.Messenger) *Runner {
 	if logger == nil {
 		logger = log.New(os.Stderr, "lark-agent: ", log.LstdFlags)
 	}
@@ -47,10 +52,14 @@ func NewRunner(cfg Config, logger *log.Logger) *Runner {
 		cfg.Timeout = 20 * time.Minute
 	}
 
+	if messenger == nil {
+		messenger = larkbridge.NewMessenger(nil)
+	}
+
 	return &Runner{
-		cfg:    cfg,
-		client: api.NewClient(),
-		logger: logger,
+		cfg:       cfg,
+		messenger: messenger,
+		logger:    logger,
 	}
 }
 
@@ -80,7 +89,7 @@ func (r *Runner) run(entry inbound.LoggedEvent) {
 	result, err := r.execute(entry)
 	if err != nil {
 		r.logger.Printf("codex task failed for message_id=%s: %v", entry.MessageID, err)
-		result = "处理失败：" + trimForFeishu(err.Error(), r.cfg.ResultMaxChars)
+		result = "处理失败：" + trimForChat(err.Error(), r.cfg.ResultMaxChars)
 	}
 
 	if err := r.reply(entry, result); err != nil {
@@ -124,7 +133,7 @@ func (r *Runner) execute(entry inbound.LoggedEvent) (string, error) {
 		if msg == "" {
 			msg = err.Error()
 		}
-		return "", fmt.Errorf("%s", trimForFeishu(msg, r.cfg.ResultMaxChars))
+		return "", fmt.Errorf("%s", trimForChat(msg, r.cfg.ResultMaxChars))
 	}
 
 	data, err := os.ReadFile(outputFile)
@@ -137,40 +146,38 @@ func (r *Runner) execute(entry inbound.LoggedEvent) (string, error) {
 		return "", fmt.Errorf("Codex 没有返回结果")
 	}
 
-	return trimForFeishu(result, r.cfg.ResultMaxChars), nil
+	return trimForChat(result, r.cfg.ResultMaxChars), nil
 }
 
 func (r *Runner) reply(entry inbound.LoggedEvent, text string) error {
-	content, err := buildTextContent(trimForFeishu(text, r.cfg.ResultMaxChars))
-	if err != nil {
-		return err
-	}
-	_, err = r.client.ReplyMessage(entry.MessageID, "text", content, entry.RootID, true)
-	return err
+	return r.messenger.Reply(context.Background(), entry, trimForChat(text, r.cfg.ResultMaxChars))
 }
 
 func buildPrompt(entry inbound.LoggedEvent, resultMaxChars int) string {
+	providerLabel := providerLabel(entry.Provider)
 	return strings.TrimSpace(fmt.Sprintf(`
-你是一个本地 Codex 执行代理，这次任务来自飞书聊天消息。
+你是一个本地 Codex 执行代理，这次任务来自%s聊天消息。
 
 要求：
 - 直接处理用户请求，尽量少讲方案、多做事。
-- 默认使用中文回复，输出要适合直接发回飞书。
+- 默认使用中文回复，输出要适合直接发回%s。
 - 如果任务能执行，就执行后汇报结果。
 - 如果缺少关键信息或存在明显风险，只说最关键的阻塞点。
 - 最终回复尽量控制在 %d 个字符以内。
 
 上下文：
-- chat_id: %s
-- sender_open_id: %s
+- provider: %s
+- channel_id: %s
+- user_id: %s
 - message_id: %s
+- thread_id: %s
 
 用户消息：
 %s
-`, resultMaxChars, entry.ChatID, entry.SenderOpenID, entry.MessageID, entry.MessageText))
+`, providerLabel, providerLabel, resultMaxChars, entry.Provider, entry.ChannelID, entry.UserID, entry.MessageID, entry.ThreadID, entry.MessageText))
 }
 
-func trimForFeishu(s string, max int) string {
+func trimForChat(s string, max int) string {
 	s = strings.TrimSpace(s)
 	if max <= 0 || len([]rune(s)) <= max {
 		return s
@@ -179,6 +186,13 @@ func trimForFeishu(s string, max int) string {
 	return strings.TrimSpace(string(runes[:max])) + "\n\n[已截断]"
 }
 
-func buildTextContent(text string) (string, error) {
-	return fmt.Sprintf(`{"text":%q}`, text), nil
+func providerLabel(provider string) string {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "slack":
+		return "Slack"
+	case "lark":
+		return "飞书"
+	default:
+		return "聊天平台"
+	}
 }

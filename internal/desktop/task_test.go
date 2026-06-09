@@ -45,9 +45,12 @@ func TestExtractRequestIgnoresTerminalTask(t *testing.T) {
 func TestQueueLifecycle(t *testing.T) {
 	queue := NewQueue(filepath.Join(t.TempDir(), "desktop-tasks"))
 	entry := inbound.LoggedEvent{
-		MessageID:    "om_123",
-		ChatID:       "oc_123",
-		SenderOpenID: "ou_123",
+		Provider:  "slack",
+		TeamID:    "T123",
+		ChannelID: "C123",
+		ThreadID:  "1712345678.000100",
+		MessageID: "1712345678.000100",
+		UserID:    "U123",
 	}
 
 	task, err := queue.Enqueue(entry, "打开 Safari")
@@ -56,6 +59,9 @@ func TestQueueLifecycle(t *testing.T) {
 	}
 	if task.Status != statusPending {
 		t.Fatalf("unexpected pending status: %s", task.Status)
+	}
+	if task.Provider != "slack" || task.ChannelID != "C123" || task.ThreadID != "1712345678.000100" {
+		t.Fatalf("unexpected reply target on task: %#v", task)
 	}
 
 	popped, err := queue.PopPending()

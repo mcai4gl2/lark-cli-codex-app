@@ -318,12 +318,21 @@ The first Slack version should focus on remote-controlling Codex from Slack, not
 
 ### Phase 1: Shared Reply Abstraction
 
-- Add provider-neutral message event and messenger interfaces.
-- Adapt `internal/inbound` to write/read the neutral event model.
-- Change `agent.Runner` to depend on `Messenger`.
-- Change desktop queue tasks to store provider, channel, message ID, and thread ID.
-- Add a Lark messenger adapter so existing gateway behavior remains unchanged.
-- Update tests for inbound extraction, agent dispatch, and desktop completion replies.
+Status: Complete.
+
+- [x] Add provider-neutral message event and messenger interfaces.
+- [x] Adapt `internal/inbound` to write/read the neutral event model.
+- [x] Change `agent.Runner` to depend on `Messenger`.
+- [x] Change desktop queue tasks to store provider, channel, message ID, and thread ID.
+- [x] Add a Lark messenger adapter so existing gateway behavior remains unchanged.
+- [x] Update tests for inbound extraction, agent dispatch, and desktop completion replies.
+
+Implementation notes:
+
+- Added `internal/platform` for `MessageEvent`, `MessageTarget`, and `Messenger`.
+- Added `internal/larkbridge` to adapt the existing Lark API client to the neutral messenger interface.
+- Existing Lark gateway and webhook paths still normalize into shared inbound events.
+- Verified with `go test ./...` using the Docker-based Go toolchain documented in `AGENTS.md`.
 
 ### Phase 2: Slack Gateway MVP
 

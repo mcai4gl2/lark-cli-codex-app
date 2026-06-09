@@ -12,21 +12,48 @@ import (
 
 func TestNewLoggedEventExtractsText(t *testing.T) {
 	entry := NewLoggedEvent(MessageInput{
-		Schema:      "2.0",
-		EventType:   "im.message.receive_v1",
-		MessageID:   "om_123",
-		MessageType: "text",
-		RawContent:  `{"text":"hello inbound"}`,
+		Schema:       "2.0",
+		EventType:    "im.message.receive_v1",
+		MessageID:    "om_123",
+		RootID:       "om_root",
+		ChatID:       "oc_123",
+		MessageType:  "text",
+		SenderOpenID: "ou_123",
+		RawContent:   `{"text":"hello inbound"}`,
 	})
 
+	if entry.Provider != "lark" {
+		t.Fatalf("unexpected provider: %s", entry.Provider)
+	}
 	if entry.MessageText != "hello inbound" {
 		t.Fatalf("unexpected message text: %s", entry.MessageText)
 	}
 	if entry.MessageID != "om_123" {
 		t.Fatalf("unexpected message_id: %s", entry.MessageID)
 	}
+	if entry.ChannelID != "oc_123" {
+		t.Fatalf("unexpected channel_id: %s", entry.ChannelID)
+	}
+	if entry.ThreadID != "om_root" {
+		t.Fatalf("unexpected thread_id: %s", entry.ThreadID)
+	}
+	if entry.UserID != "ou_123" {
+		t.Fatalf("unexpected user_id: %s", entry.UserID)
+	}
 	if entry.ReceivedAt == "" {
 		t.Fatalf("expected received_at to be populated")
+	}
+}
+
+func TestNewLoggedEventUsesMessageIDAsDefaultThread(t *testing.T) {
+	entry := NewLoggedEvent(MessageInput{
+		MessageID:  "om_123",
+		ChatID:     "oc_123",
+		RawContent: `{"text":"hello inbound"}`,
+	})
+
+	if entry.ThreadID != "om_123" {
+		t.Fatalf("unexpected default thread_id: %s", entry.ThreadID)
 	}
 }
 

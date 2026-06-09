@@ -1,6 +1,7 @@
 package inbound
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -10,13 +11,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yjwong/lark-cli/internal/api"
+	"github.com/yjwong/lark-cli/internal/larkbridge"
+	"github.com/yjwong/lark-cli/internal/platform"
 )
 
 // Config configures how inbound message events are persisted and handled.
 type Config struct {
 	EventLogPath  string
 	AutoReplyText string
+	Messenger     platform.Messenger
 }
 
 // MessageInput is a normalized message event shape that can be populated from
@@ -36,38 +39,21 @@ type MessageInput struct {
 	SenderType   string
 	SenderOpenID string
 	SenderUserID string
+	UserName     string
+	BotID        string
 	RawContent   string
 	RawEvent     json.RawMessage
 }
 
 // LoggedEvent is the JSONL shape persisted by inbound handlers.
-type LoggedEvent struct {
-	ReceivedAt   string          `json:"received_at"`
-	Schema       string          `json:"schema,omitempty"`
-	EventID      string          `json:"event_id,omitempty"`
-	EventType    string          `json:"event_type,omitempty"`
-	TenantKey    string          `json:"tenant_key,omitempty"`
-	AppID        string          `json:"app_id,omitempty"`
-	MessageID    string          `json:"message_id,omitempty"`
-	RootID       string          `json:"root_id,omitempty"`
-	ParentID     string          `json:"parent_id,omitempty"`
-	ChatID       string          `json:"chat_id,omitempty"`
-	ChatType     string          `json:"chat_type,omitempty"`
-	MessageType  string          `json:"message_type,omitempty"`
-	MessageText  string          `json:"message_text,omitempty"`
-	SenderType   string          `json:"sender_type,omitempty"`
-	SenderOpenID string          `json:"sender_open_id,omitempty"`
-	SenderUserID string          `json:"sender_user_id,omitempty"`
-	RawContent   string          `json:"raw_content,omitempty"`
-	RawEvent     json.RawMessage `json:"raw_event,omitempty"`
-}
+type LoggedEvent = platform.MessageEvent
 
 // Handler persists inbound events and optionally sends auto replies.
 type Handler struct {
-	cfg    Config
-	client *api.Client
-	logger *log.Logger
-	mu     sync.Mutex
+	cfg       Config
+	messenger platform.Messenger
+	logger    *log.Logger
+	mu        sync.Mutex
 }
 
 // NewHandler returns a shared inbound handler.
@@ -76,33 +62,41 @@ func NewHandler(cfg Config, logger *log.Logger) *Handler {
 		logger = log.New(os.Stderr, "lark-inbound: ", log.LstdFlags)
 	}
 	return &Handler{
-		cfg:    cfg,
-		client: api.NewClient(),
-		logger: logger,
+		cfg:       cfg,
+		messenger: defaultMessenger(cfg.Messenger),
+		logger:    logger,
 	}
 }
 
 // NewLoggedEvent builds a persisted event from a normalized input.
 func NewLoggedEvent(input MessageInput) LoggedEvent {
+	provider := "lark"
+	threadID := input.RootID
+	if threadID == "" {
+		threadID = input.MessageID
+	}
+	userID := input.SenderOpenID
+	if userID == "" {
+		userID = input.SenderUserID
+	}
+
 	return LoggedEvent{
-		ReceivedAt:   time.Now().Format(time.RFC3339Nano),
-		Schema:       input.Schema,
-		EventID:      input.EventID,
-		EventType:    input.EventType,
-		TenantKey:    input.TenantKey,
-		AppID:        input.AppID,
-		MessageID:    input.MessageID,
-		RootID:       input.RootID,
-		ParentID:     input.ParentID,
-		ChatID:       input.ChatID,
-		ChatType:     input.ChatType,
-		MessageType:  input.MessageType,
-		MessageText:  ExtractMessageText(input.MessageType, input.RawContent),
-		SenderType:   input.SenderType,
-		SenderOpenID: input.SenderOpenID,
-		SenderUserID: input.SenderUserID,
-		RawContent:   input.RawContent,
-		RawEvent:     input.RawEvent,
+		Provider:    provider,
+		ReceivedAt:  time.Now().Format(time.RFC3339Nano),
+		EventID:     input.EventID,
+		EventType:   input.EventType,
+		TeamID:      input.TenantKey,
+		ChannelID:   input.ChatID,
+		ChannelType: input.ChatType,
+		MessageID:   input.MessageID,
+		ThreadID:    threadID,
+		UserID:      userID,
+		UserName:    input.UserName,
+		BotID:       input.BotID,
+		MessageType: input.MessageType,
+		MessageText: ExtractMessageText(input.MessageType, input.RawContent),
+		RawContent:  input.RawContent,
+		RawEvent:    input.RawEvent,
 	}
 }
 
@@ -117,10 +111,11 @@ func (h *Handler) Process(entry LoggedEvent) error {
 	}
 
 	h.logger.Printf(
-		"received message event message_id=%s chat_id=%s sender_open_id=%s",
+		"received message event provider=%s message_id=%s channel_id=%s user_id=%s",
+		entry.Provider,
 		entry.MessageID,
-		entry.ChatID,
-		entry.SenderOpenID,
+		entry.ChannelID,
+		entry.UserID,
 	)
 
 	if h.cfg.AutoReplyText != "" && ShouldAutoReply(entry) {
@@ -160,13 +155,7 @@ func (h *Handler) appendEvent(entry LoggedEvent) error {
 
 func (h *Handler) autoReply(entry LoggedEvent) error {
 	reply := RenderReplyTemplate(h.cfg.AutoReplyText, entry)
-	content, err := buildTextContent(reply)
-	if err != nil {
-		return err
-	}
-
-	_, err = h.client.ReplyMessage(entry.MessageID, "text", content, entry.RootID, true)
-	return err
+	return h.messenger.Reply(context.Background(), entry, reply)
 }
 
 // ExtractMessageText returns the human-readable text when possible.
@@ -199,9 +188,6 @@ func ShouldAutoReply(entry LoggedEvent) bool {
 	if entry.MessageID == "" {
 		return false
 	}
-	if entry.SenderType != "" && entry.SenderType != "user" {
-		return false
-	}
 	return true
 }
 
@@ -210,18 +196,19 @@ func RenderReplyTemplate(template string, entry LoggedEvent) string {
 	replacer := strings.NewReplacer(
 		"{{text}}", entry.MessageText,
 		"{{message_id}}", entry.MessageID,
-		"{{chat_id}}", entry.ChatID,
-		"{{sender_open_id}}", entry.SenderOpenID,
-		"{{sender_user_id}}", entry.SenderUserID,
+		"{{chat_id}}", entry.ChannelID,
+		"{{channel_id}}", entry.ChannelID,
+		"{{thread_id}}", entry.ThreadID,
+		"{{sender_open_id}}", entry.UserID,
+		"{{sender_user_id}}", entry.UserID,
+		"{{user_id}}", entry.UserID,
 	)
 	return replacer.Replace(template)
 }
 
-func buildTextContent(text string) (string, error) {
-	payload := map[string]string{"text": text}
-	content, err := json.Marshal(payload)
-	if err != nil {
-		return "", err
+func defaultMessenger(messenger platform.Messenger) platform.Messenger {
+	if messenger != nil {
+		return messenger
 	}
-	return string(content), nil
+	return larkbridge.NewMessenger(nil)
 }
