@@ -368,11 +368,24 @@ Manual Slack workspace smoke tests remain to be run with real Slack app credenti
 
 ### Phase 3: Slack CLI Commands
 
-- Add `slack msg send`.
-- Add `slack msg history`.
-- Add `slack msg thread`.
-- Add optional reaction commands.
-- Add compact JSON outputs that mirror the style of current Lark commands.
+Status: Complete.
+
+- [x] Add `slack msg send`.
+- [x] Add `slack msg history`.
+- [x] Add `slack msg thread`.
+- [x] Add optional reaction commands.
+- [x] Add compact JSON outputs that mirror the style of current Lark commands.
+
+Implementation notes:
+
+- Added `lark slack msg send --channel C123 --text "hello"` with optional `--thread-ts`.
+- Added `lark slack msg history --channel C123 --limit 20` using `conversations.history`.
+- Added `lark slack msg thread --channel C123 --thread-ts 1710000000.000100` using `conversations.replies`.
+- Kept outputs compact with `success`, `channel`, `ts`, `thread_ts`, `messages`, `count`, and `has_more` fields.
+- Added `lark slack msg react --channel C123 --ts 1710000000.000100 --reaction eyes` using `reactions.add`.
+- Added `lark slack msg react list --channel C123 --ts 1710000000.000100` using `reactions.get`.
+- Added `lark slack msg react remove --channel C123 --ts 1710000000.000100 --reaction eyes` using `reactions.remove`.
+- Reaction commands require Slack `reactions:read` for list and `reactions:write` for add/remove.
 
 ### Phase 4: Packaging and Naming
 

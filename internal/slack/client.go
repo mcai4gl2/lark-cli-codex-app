@@ -40,6 +40,91 @@ type slackResponse struct {
 	Error string `json:"error,omitempty"`
 }
 
+// Message is a compact Slack message representation for CLI output.
+type Message struct {
+	Type        string            `json:"type,omitempty"`
+	Subtype     string            `json:"subtype,omitempty"`
+	User        string            `json:"user,omitempty"`
+	BotID       string            `json:"bot_id,omitempty"`
+	Text        string            `json:"text,omitempty"`
+	TS          string            `json:"ts"`
+	ThreadTS    string            `json:"thread_ts,omitempty"`
+	ReplyCount  int               `json:"reply_count,omitempty"`
+	Channel     string            `json:"channel,omitempty"`
+	ChannelName string            `json:"channel_name,omitempty"`
+	Reactions   []ReactionSummary `json:"reactions,omitempty"`
+}
+
+// MessageList is the compact JSON response used by Slack message commands.
+type MessageList struct {
+	Messages []Message `json:"messages"`
+	Count    int       `json:"count"`
+	Channel  string    `json:"channel"`
+	ThreadTS string    `json:"thread_ts,omitempty"`
+	HasMore  bool      `json:"has_more,omitempty"`
+}
+
+// SendResult is the compact JSON response for Slack message sends.
+type SendResult struct {
+	Success  bool   `json:"success"`
+	Channel  string `json:"channel"`
+	TS       string `json:"ts"`
+	ThreadTS string `json:"thread_ts,omitempty"`
+}
+
+// ReactionSummary is a compact Slack reaction entry.
+type ReactionSummary struct {
+	Name  string   `json:"name"`
+	Users []string `json:"users,omitempty"`
+	Count int      `json:"count"`
+}
+
+// ReactionResult is the compact JSON response for adding or removing a reaction.
+type ReactionResult struct {
+	Success  bool   `json:"success"`
+	Channel  string `json:"channel"`
+	TS       string `json:"ts"`
+	Reaction string `json:"reaction"`
+}
+
+// ReactionList is the compact JSON response for reactions.get.
+type ReactionList struct {
+	Channel string  `json:"channel"`
+	Type    string  `json:"type,omitempty"`
+	Message Message `json:"message"`
+}
+
+// HistoryOptions configures a conversations.history request.
+type HistoryOptions struct {
+	Channel string
+	Limit   int
+	Oldest  string
+	Latest  string
+}
+
+// ThreadOptions configures a conversations.replies request.
+type ThreadOptions struct {
+	Channel  string
+	ThreadTS string
+	Limit    int
+	Oldest   string
+	Latest   string
+}
+
+// ReactionOptions configures reactions.add and reactions.remove.
+type ReactionOptions struct {
+	Channel   string
+	Timestamp string
+	Name      string
+}
+
+// ReactionGetOptions configures reactions.get.
+type ReactionGetOptions struct {
+	Channel   string
+	Timestamp string
+	Full      bool
+}
+
 // NewClient returns a Slack Web API client.
 func NewClient(cfg ClientConfig) *Client {
 	baseURL := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
@@ -71,6 +156,146 @@ func (c *Client) Send(ctx context.Context, target platform.MessageTarget, text s
 	return c.postMessage(ctx, target.ChannelID, target.ThreadID, text)
 }
 
+// SendMessage posts a Slack message and returns Slack's channel/timestamp.
+func (c *Client) SendMessage(ctx context.Context, channel, threadTS, text string) (SendResult, error) {
+	return c.postMessageResult(ctx, channel, threadTS, text)
+}
+
+// History calls conversations.history.
+func (c *Client) History(ctx context.Context, opts HistoryOptions) (MessageList, error) {
+	channel := strings.TrimSpace(opts.Channel)
+	if channel == "" {
+		return MessageList{}, fmt.Errorf("slack channel is required")
+	}
+
+	payload := map[string]interface{}{
+		"channel": channel,
+	}
+	if opts.Limit > 0 {
+		payload["limit"] = opts.Limit
+	}
+	if strings.TrimSpace(opts.Oldest) != "" {
+		payload["oldest"] = strings.TrimSpace(opts.Oldest)
+	}
+	if strings.TrimSpace(opts.Latest) != "" {
+		payload["latest"] = strings.TrimSpace(opts.Latest)
+	}
+
+	var response struct {
+		slackResponse
+		Messages []Message `json:"messages"`
+		HasMore  bool      `json:"has_more"`
+	}
+	if err := c.call(ctx, "conversations.history", payload, &response); err != nil {
+		return MessageList{}, err
+	}
+	if !response.OK {
+		return MessageList{}, fmt.Errorf("slack conversations.history failed: %s", response.Error)
+	}
+
+	return MessageList{
+		Messages: response.Messages,
+		Count:    len(response.Messages),
+		Channel:  channel,
+		HasMore:  response.HasMore,
+	}, nil
+}
+
+// Thread calls conversations.replies.
+func (c *Client) Thread(ctx context.Context, opts ThreadOptions) (MessageList, error) {
+	channel := strings.TrimSpace(opts.Channel)
+	threadTS := strings.TrimSpace(opts.ThreadTS)
+	if channel == "" {
+		return MessageList{}, fmt.Errorf("slack channel is required")
+	}
+	if threadTS == "" {
+		return MessageList{}, fmt.Errorf("slack thread timestamp is required")
+	}
+
+	payload := map[string]interface{}{
+		"channel": channel,
+		"ts":      threadTS,
+	}
+	if opts.Limit > 0 {
+		payload["limit"] = opts.Limit
+	}
+	if strings.TrimSpace(opts.Oldest) != "" {
+		payload["oldest"] = strings.TrimSpace(opts.Oldest)
+	}
+	if strings.TrimSpace(opts.Latest) != "" {
+		payload["latest"] = strings.TrimSpace(opts.Latest)
+	}
+
+	var response struct {
+		slackResponse
+		Messages []Message `json:"messages"`
+		HasMore  bool      `json:"has_more"`
+	}
+	if err := c.call(ctx, "conversations.replies", payload, &response); err != nil {
+		return MessageList{}, err
+	}
+	if !response.OK {
+		return MessageList{}, fmt.Errorf("slack conversations.replies failed: %s", response.Error)
+	}
+
+	return MessageList{
+		Messages: response.Messages,
+		Count:    len(response.Messages),
+		Channel:  channel,
+		ThreadTS: threadTS,
+		HasMore:  response.HasMore,
+	}, nil
+}
+
+// AddReaction calls reactions.add for a Slack message.
+func (c *Client) AddReaction(ctx context.Context, opts ReactionOptions) (ReactionResult, error) {
+	return c.callReactionMutation(ctx, "reactions.add", opts)
+}
+
+// RemoveReaction calls reactions.remove for a Slack message.
+func (c *Client) RemoveReaction(ctx context.Context, opts ReactionOptions) (ReactionResult, error) {
+	return c.callReactionMutation(ctx, "reactions.remove", opts)
+}
+
+// GetReactions calls reactions.get for a Slack message.
+func (c *Client) GetReactions(ctx context.Context, opts ReactionGetOptions) (ReactionList, error) {
+	channel := strings.TrimSpace(opts.Channel)
+	timestamp := strings.TrimSpace(opts.Timestamp)
+	if channel == "" {
+		return ReactionList{}, fmt.Errorf("slack channel is required")
+	}
+	if timestamp == "" {
+		return ReactionList{}, fmt.Errorf("slack timestamp is required")
+	}
+
+	payload := map[string]interface{}{
+		"channel":   channel,
+		"timestamp": timestamp,
+	}
+	if opts.Full {
+		payload["full"] = true
+	}
+
+	var response struct {
+		slackResponse
+		Type    string  `json:"type"`
+		Channel string  `json:"channel"`
+		Message Message `json:"message"`
+	}
+	if err := c.call(ctx, "reactions.get", payload, &response); err != nil {
+		return ReactionList{}, err
+	}
+	if !response.OK {
+		return ReactionList{}, fmt.Errorf("slack reactions.get failed: %s", response.Error)
+	}
+
+	return ReactionList{
+		Channel: response.Channel,
+		Type:    response.Type,
+		Message: response.Message,
+	}, nil
+}
+
 // AuthTest calls Slack auth.test.
 func (c *Client) AuthTest(ctx context.Context) (AuthInfo, error) {
 	var response struct {
@@ -87,13 +312,18 @@ func (c *Client) AuthTest(ctx context.Context) (AuthInfo, error) {
 }
 
 func (c *Client) postMessage(ctx context.Context, channel, threadTS, text string) error {
+	_, err := c.postMessageResult(ctx, channel, threadTS, text)
+	return err
+}
+
+func (c *Client) postMessageResult(ctx context.Context, channel, threadTS, text string) (SendResult, error) {
 	channel = strings.TrimSpace(channel)
 	text = strings.TrimSpace(text)
 	if channel == "" {
-		return fmt.Errorf("slack channel is required")
+		return SendResult{}, fmt.Errorf("slack channel is required")
 	}
 	if text == "" {
-		return fmt.Errorf("slack message text is required")
+		return SendResult{}, fmt.Errorf("slack message text is required")
 	}
 
 	payload := map[string]interface{}{
@@ -106,14 +336,70 @@ func (c *Client) postMessage(ctx context.Context, channel, threadTS, text string
 		payload["thread_ts"] = strings.TrimSpace(threadTS)
 	}
 
-	var response slackResponse
+	var response struct {
+		slackResponse
+		Channel string `json:"channel"`
+		TS      string `json:"ts"`
+		Message struct {
+			ThreadTS string `json:"thread_ts"`
+		} `json:"message"`
+	}
 	if err := c.call(ctx, "chat.postMessage", payload, &response); err != nil {
-		return err
+		return SendResult{}, err
 	}
 	if !response.OK {
-		return fmt.Errorf("slack chat.postMessage failed: %s", response.Error)
+		return SendResult{}, fmt.Errorf("slack chat.postMessage failed: %s", response.Error)
 	}
-	return nil
+	resultThreadTS := strings.TrimSpace(threadTS)
+	if resultThreadTS == "" {
+		resultThreadTS = response.Message.ThreadTS
+	}
+	return SendResult{
+		Success:  true,
+		Channel:  response.Channel,
+		TS:       response.TS,
+		ThreadTS: resultThreadTS,
+	}, nil
+}
+
+func (c *Client) callReactionMutation(ctx context.Context, method string, opts ReactionOptions) (ReactionResult, error) {
+	channel := strings.TrimSpace(opts.Channel)
+	timestamp := strings.TrimSpace(opts.Timestamp)
+	name := normalizeReactionName(opts.Name)
+	if channel == "" {
+		return ReactionResult{}, fmt.Errorf("slack channel is required")
+	}
+	if timestamp == "" {
+		return ReactionResult{}, fmt.Errorf("slack timestamp is required")
+	}
+	if name == "" {
+		return ReactionResult{}, fmt.Errorf("slack reaction name is required")
+	}
+
+	payload := map[string]interface{}{
+		"channel":   channel,
+		"timestamp": timestamp,
+		"name":      name,
+	}
+
+	var response slackResponse
+	if err := c.call(ctx, method, payload, &response); err != nil {
+		return ReactionResult{}, err
+	}
+	if !response.OK {
+		return ReactionResult{}, fmt.Errorf("slack %s failed: %s", method, response.Error)
+	}
+
+	return ReactionResult{
+		Success:  true,
+		Channel:  channel,
+		TS:       timestamp,
+		Reaction: name,
+	}, nil
+}
+
+func normalizeReactionName(name string) string {
+	return strings.Trim(strings.TrimSpace(name), ":")
 }
 
 func (c *Client) call(ctx context.Context, method string, payload interface{}, out interface{}) error {
