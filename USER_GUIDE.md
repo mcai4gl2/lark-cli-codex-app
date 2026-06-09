@@ -166,7 +166,285 @@ export SLACK_GATEWAY_EVENT_LOG="$HOME/.slack/gateway-events.jsonl"
 You can also put equivalent Slack settings in `.lark/config.yaml`; see
 `config.example.yaml`.
 
-## 8. Recommended Way To Run
+## 8. How The Local Workspace Folder Works
+
+There are two different local folders to understand:
+
+| Folder type | Purpose |
+| --- | --- |
+| Config/state folder | Stores config, event logs, and desktop task queue state. |
+| Codex workspace folder | The folder where `codex exec` is launched for an inbound Slack task. |
+
+The Codex workspace is the important folder for agent behavior. When a Slack
+message triggers the agent, this project runs Codex roughly like this:
+
+```bash
+codex -a never -s workspace-write exec \
+  -C "$WORKSPACE" \
+  --skip-git-repo-check \
+  --output-last-message /tmp/.../last-message.txt \
+  "$PROMPT"
+```
+
+The `-C "$WORKSPACE"` argument controls where Codex starts. If your Slack
+message does not mention a folder or repository, Codex still starts in this
+configured workspace and interprets the request from there.
+
+Slack workspace selection order:
+
+1. `--agent-workspace` passed to `lark slack gateway serve`.
+2. `SLACK_AGENT_WORKSPACE`.
+3. `slack.agent.workspace` in `.lark/config.yaml`.
+4. Generic Lark agent workspace.
+5. If nothing is configured:
+   - `~/WorkSpace` if that folder exists.
+   - otherwise the directory where you started `lark slack gateway serve`.
+   - otherwise the parent of `LARK_CONFIG_DIR`.
+
+Examples:
+
+```bash
+./lark slack gateway serve \
+  --agent \
+  --agent-workspace "$HOME/WorkSpace/lark-cli-codex-app"
+```
+
+In this setup, a Slack message like:
+
+```text
+fix the failing tests
+```
+
+is handled from:
+
+```text
+$HOME/WorkSpace/lark-cli-codex-app
+```
+
+If instead you run:
+
+```bash
+./lark slack gateway serve \
+  --agent \
+  --agent-workspace "$HOME/WorkSpace"
+```
+
+then Codex starts from the broader workspace folder. In that mode, Slack
+messages should name the project or path:
+
+```text
+In lark-cli-codex-app, inspect the Slack gateway tests.
+```
+
+Current limitation: the agent prompt receives the current Slack message and
+basic Slack coordinates. It does not automatically load prior Slack thread
+history or previous event logs into the prompt. Event logs are useful for audit
+and debugging, but they are not memory by themselves.
+
+## 9. Recommended Two-Mode Setup
+
+For your use case, the cleanest setup is to run two separate Slack apps and two
+separate gateway processes:
+
+1. A generic chat app for random topics and personal memory.
+2. One project-specific app per active project, or at least one project app per
+   workspace family.
+
+This keeps permissions, event logs, Slack app identity, and Codex workspace
+boundaries easy to reason about.
+
+### Generic Chat App
+
+Use this for open-ended questions, personal notes, research, and durable memory.
+
+Recommended Slack app:
+
+```text
+Name: Codex Chat
+Primary use: DMs and maybe one private #codex-chat channel
+Workspace: ~/CodexChat
+```
+
+Recommended local folder:
+
+```bash
+mkdir -p "$HOME/CodexChat/topics"
+cd "$HOME/CodexChat"
+git init
+cat > MEMORY.md <<'EOF'
+# Memory
+
+Use this file for durable preferences, facts, decisions, and long-running
+context that should be remembered across generic chat sessions.
+EOF
+```
+
+Recommended gateway command:
+
+```bash
+LARK_CONFIG_DIR="$HOME/.lark-codex-chat" \
+SLACK_APP_TOKEN="xapp-generic-chat" \
+SLACK_BOT_TOKEN="xoxb-generic-chat" \
+SLACK_GATEWAY_EVENT_LOG="$HOME/CodexChat/.slack/gateway-events.jsonl" \
+./lark slack gateway serve \
+  --agent \
+  --agent-workspace "$HOME/CodexChat"
+```
+
+Recommended Slack usage:
+
+```text
+Remember that I prefer concise implementation plans. Save that in MEMORY.md.
+```
+
+```text
+Summarize this discussion into topics/2026-06-10-slack-setup.md.
+```
+
+```text
+What do you remember about my preferred Slack/Codex setup?
+```
+
+Because current code does not automatically summarize Slack history, make memory
+updates explicit when you want them persisted. The generic chat workspace gives
+Codex a stable place to write and read those notes.
+
+### Project-Specific App
+
+Use this for code changes, repo maintenance, CI debugging, and project-specific
+decisions.
+
+Recommended Slack app:
+
+```text
+Name: Codex Project - <project-name>
+Primary use: project channel mentions and project DMs
+Workspace: exact project repository path
+```
+
+Recommended gateway command:
+
+```bash
+LARK_CONFIG_DIR="$HOME/.lark-codex-project-lark-cli" \
+SLACK_APP_TOKEN="xapp-project" \
+SLACK_BOT_TOKEN="xoxb-project" \
+SLACK_GATEWAY_EVENT_LOG="$HOME/WorkSpace/lark-cli-codex-app/.slack/gateway-events.jsonl" \
+./lark slack gateway serve \
+  --agent \
+  --agent-workspace "$HOME/WorkSpace/lark-cli-codex-app"
+```
+
+Recommended Slack usage:
+
+```text
+Run the focused Slack package tests and fix any failures.
+```
+
+```text
+Update USER_GUIDE.md with the workspace folder behavior.
+```
+
+In project mode, avoid pointing the gateway at a broad folder unless you want
+Codex to choose among multiple repositories. The safest default is one gateway
+process per important project, with `--agent-workspace` set to the exact repo.
+
+### Why Multiple Slack Apps
+
+Multiple Slack apps are cleaner than one app trying to serve every purpose:
+
+| Reason | Benefit |
+| --- | --- |
+| Separate bot identity | You can tell whether you are talking to generic Codex or project Codex. |
+| Separate tokens | A leaked or rotated project token does not affect generic chat. |
+| Separate logs | Generic history and project audit trails stay apart. |
+| Separate workspaces | Codex starts in the right folder without guessing. |
+| Separate scopes | Project apps can have channel/history scopes only where needed. |
+
+If you prefer fewer Slack apps, a reasonable compromise is one generic app and
+one project app pointed at `~/WorkSpace`, but project Slack messages should then
+name the target repo explicitly.
+
+### Suggested Launch Scripts
+
+Create small local scripts so each mode is repeatable.
+
+`~/bin/codex-chat-gateway`:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+export LARK_CONFIG_DIR="$HOME/.lark-codex-chat"
+export SLACK_APP_TOKEN="xapp-generic-chat"
+export SLACK_BOT_TOKEN="xoxb-generic-chat"
+export SLACK_GATEWAY_EVENT_LOG="$HOME/CodexChat/.slack/gateway-events.jsonl"
+
+mkdir -p "$(dirname "$SLACK_GATEWAY_EVENT_LOG")"
+
+LARK_BIN="${LARK_BIN:-$HOME/.local/bin/lark}"
+exec "$LARK_BIN" slack gateway serve \
+  --agent \
+  --agent-workspace "$HOME/CodexChat"
+```
+
+`~/bin/codex-project-lark-cli-gateway`:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+export LARK_CONFIG_DIR="$HOME/.lark-codex-project-lark-cli"
+export SLACK_APP_TOKEN="xapp-project"
+export SLACK_BOT_TOKEN="xoxb-project"
+export SLACK_GATEWAY_EVENT_LOG="$HOME/WorkSpace/lark-cli-codex-app/.slack/gateway-events.jsonl"
+
+mkdir -p "$(dirname "$SLACK_GATEWAY_EVENT_LOG")"
+
+LARK_BIN="${LARK_BIN:-$HOME/.local/bin/lark}"
+exec "$LARK_BIN" slack gateway serve \
+  --agent \
+  --agent-workspace "$HOME/WorkSpace/lark-cli-codex-app"
+```
+
+Then run each script in a separate terminal, tmux pane, launchd job, or systemd
+user service.
+
+### Future Memory Extension
+
+The current gateway stores raw normalized events in a JSONL event log, but it
+does not yet create channel folders, thread folders, or conversation summaries.
+
+A useful extension would be to add a Slack memory/audit store such as:
+
+```text
+.slack/
+  gateway-events.jsonl
+  conversations/
+    T123/
+      C123/
+        channel.json
+        daily/
+          2026-06-10.jsonl
+        threads/
+          1710000000.000100/
+            events.jsonl
+            summary.md
+            memory.md
+```
+
+Recommended behavior for that extension:
+
+- Write each inbound/outbound message to a channel and thread JSONL file.
+- Periodically summarize long threads into `summary.md`.
+- Store durable user-approved facts in `memory.md`.
+- Include relevant summaries in the Codex prompt before dispatch.
+- Keep raw JSONL as audit data and summaries as prompt-efficient memory.
+
+Until that is implemented, the cleanest memory pattern is to use a generic
+workspace such as `~/CodexChat` and explicitly ask Codex to update `MEMORY.md`
+or topic files when something should persist.
+
+## 10. Recommended Way To Run
 
 For normal use, run the Slack gateway as a long-lived local process:
 
@@ -214,7 +492,7 @@ desktop permissions:
 ./lark desktop helper serve
 ```
 
-## 9. How To Use It From Slack
+## 11. How To Use It From Slack
 
 DM the app:
 
@@ -237,7 +515,7 @@ Ask for GUI work:
 The gateway ignores bot-originated messages to avoid loops. Channel messages
 must mention the bot; ordinary channel chatter is ignored by this implementation.
 
-## 10. Slack Message Commands
+## 12. Slack Message Commands
 
 These commands use the bot token directly. They are useful for smoke tests,
 manual replies, and compact history reads.
@@ -299,7 +577,7 @@ Remove a reaction:
   --reaction eyes
 ```
 
-## 11. Smoke Test Checklist
+## 13. Smoke Test Checklist
 
 After installation and configuration:
 
@@ -322,7 +600,7 @@ After installation and configuration:
 
 8. Add and remove a reaction on a known message timestamp.
 
-## 12. Troubleshooting
+## 14. Troubleshooting
 
 `SLACK_APP_TOKEN is required`
 
