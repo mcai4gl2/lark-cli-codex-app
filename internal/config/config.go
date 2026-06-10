@@ -42,6 +42,11 @@ type Config struct {
 			EventLog      string `mapstructure:"event_log"`
 			AutoReplyText string `mapstructure:"auto_reply_text"`
 		} `mapstructure:"gateway"`
+		Memory struct {
+			Enabled         bool   `mapstructure:"enabled"`
+			Root            string `mapstructure:"root"`
+			MaxSectionChars int    `mapstructure:"max_section_chars"`
+		} `mapstructure:"memory"`
 		Agent struct {
 			Enabled        bool   `mapstructure:"enabled"`
 			CodexBinary    string `mapstructure:"codex_binary"`
@@ -109,6 +114,9 @@ func Init() error {
 	viper.SetDefault("agent.timeout_minutes", 20)
 	viper.SetDefault("gateway.event_log", filepath.Join(cfgDir, "gateway-events.jsonl"))
 	viper.SetDefault("slack.gateway.event_log", filepath.Join(rootDir, ".slack", "gateway-events.jsonl"))
+	viper.SetDefault("slack.memory.enabled", false)
+	viper.SetDefault("slack.memory.root", filepath.Join(rootDir, ".slack", "conversations"))
+	viper.SetDefault("slack.memory.max_section_chars", 2000)
 	viper.SetDefault("slack.agent.enabled", false)
 	viper.SetDefault("slack.agent.codex_binary", "codex")
 	viper.SetDefault("slack.agent.ack_text", "Received. Working on it.")
@@ -143,6 +151,9 @@ func Init() error {
 	viper.BindEnv("slack.agent.timeout_minutes", "SLACK_AGENT_TIMEOUT_MINUTES")
 	viper.BindEnv("slack.gateway.event_log", "SLACK_GATEWAY_EVENT_LOG")
 	viper.BindEnv("slack.gateway.auto_reply_text", "SLACK_GATEWAY_AUTO_REPLY_TEXT")
+	viper.BindEnv("slack.memory.enabled", "SLACK_MEMORY_ENABLED")
+	viper.BindEnv("slack.memory.root", "SLACK_MEMORY_ROOT")
+	viper.BindEnv("slack.memory.max_section_chars", "SLACK_MEMORY_MAX_SECTION_CHARS")
 	viper.BindEnv("webhook.listen_addr", "LARK_WEBHOOK_LISTEN")
 	viper.BindEnv("webhook.path", "LARK_WEBHOOK_PATH")
 	viper.BindEnv("webhook.verification_token", "LARK_WEBHOOK_TOKEN")
@@ -316,6 +327,32 @@ func GetSlackGatewayAutoReplyText() string {
 // GetSlackDesktopTaskRoot returns the Slack-specific desktop queue root.
 func GetSlackDesktopTaskRoot() string {
 	return filepath.Join(rootDir, ".slack", "desktop-tasks")
+}
+
+// GetSlackMemoryEnabled returns whether Slack memory/audit folders are enabled.
+func GetSlackMemoryEnabled() bool {
+	return viper.GetBool("slack.memory.enabled")
+}
+
+// GetSlackMemoryRoot returns the root directory for Slack conversation memory.
+func GetSlackMemoryRoot() string {
+	path := strings.TrimSpace(viper.GetString("slack.memory.root"))
+	if path == "" {
+		return filepath.Join(rootDir, ".slack", "conversations")
+	}
+	if !filepath.IsAbs(path) {
+		return filepath.Join(rootDir, path)
+	}
+	return path
+}
+
+// GetSlackMemoryMaxSectionChars returns the per-section prompt context limit.
+func GetSlackMemoryMaxSectionChars() int {
+	maxChars := viper.GetInt("slack.memory.max_section_chars")
+	if maxChars <= 0 {
+		return 2000
+	}
+	return maxChars
 }
 
 // GetSlackAgentEnabled returns whether Slack messages should dispatch to Codex.

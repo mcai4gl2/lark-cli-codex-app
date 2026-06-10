@@ -226,6 +226,8 @@ If instead you run:
 ```bash
 ./lark slack gateway serve \
   --agent \
+  --memory \
+  --memory-root "$HOME/WorkSpace/.slack/conversations" \
   --agent-workspace "$HOME/WorkSpace"
 ```
 
@@ -236,10 +238,21 @@ messages should name the project or path:
 In lark-cli-codex-app, inspect the Slack gateway tests.
 ```
 
-Current limitation: the agent prompt receives the current Slack message and
-basic Slack coordinates. It does not automatically load prior Slack thread
-history or previous event logs into the prompt. Event logs are useful for audit
-and debugging, but they are not memory by themselves.
+When Slack memory is enabled, the gateway writes inbound records to both the
+thread log and the channel daily log under `.slack/conversations/`. Final Codex
+replies are written to the thread log. Before dispatching a Slack task to Codex,
+the gateway loads existing channel memory, thread memory, and thread summaries
+into the prompt when those Markdown files exist.
+
+Enable it with `--memory`:
+
+```bash
+./lark slack gateway serve \
+  --agent \
+  --memory \
+  --memory-root "$HOME/CodexChat/.slack/conversations" \
+  --agent-workspace "$HOME/CodexChat"
+```
 
 ## 9. Recommended Two-Mode Setup
 
@@ -288,6 +301,8 @@ SLACK_BOT_TOKEN="xoxb-generic-chat" \
 SLACK_GATEWAY_EVENT_LOG="$HOME/CodexChat/.slack/gateway-events.jsonl" \
 ./lark slack gateway serve \
   --agent \
+  --memory \
+  --memory-root "$HOME/CodexChat/.slack/conversations" \
   --agent-workspace "$HOME/CodexChat"
 ```
 
@@ -305,9 +320,18 @@ Summarize this discussion into topics/2026-06-10-slack-setup.md.
 What do you remember about my preferred Slack/Codex setup?
 ```
 
-Because current code does not automatically summarize Slack history, make memory
-updates explicit when you want them persisted. The generic chat workspace gives
-Codex a stable place to write and read those notes.
+Use `lark slack memory append` for durable facts you explicitly want injected
+into future prompts:
+
+```bash
+./lark slack memory append \
+  --channel D123 \
+  --scope channel \
+  --text "- User prefers concise implementation plans."
+```
+
+Automatic summarization is still deferred, so ask Codex to summarize important
+threads or append durable facts when you want them persisted.
 
 ### Project-Specific App
 
@@ -331,6 +355,8 @@ SLACK_BOT_TOKEN="xoxb-project" \
 SLACK_GATEWAY_EVENT_LOG="$HOME/WorkSpace/lark-cli-codex-app/.slack/gateway-events.jsonl" \
 ./lark slack gateway serve \
   --agent \
+  --memory \
+  --memory-root "$HOME/WorkSpace/lark-cli-codex-app/.slack/conversations" \
   --agent-workspace "$HOME/WorkSpace/lark-cli-codex-app"
 ```
 
@@ -384,6 +410,8 @@ mkdir -p "$(dirname "$SLACK_GATEWAY_EVENT_LOG")"
 LARK_BIN="${LARK_BIN:-$HOME/.local/bin/lark}"
 exec "$LARK_BIN" slack gateway serve \
   --agent \
+  --memory \
+  --memory-root "$HOME/CodexChat/.slack/conversations" \
   --agent-workspace "$HOME/CodexChat"
 ```
 
@@ -403,46 +431,55 @@ mkdir -p "$(dirname "$SLACK_GATEWAY_EVENT_LOG")"
 LARK_BIN="${LARK_BIN:-$HOME/.local/bin/lark}"
 exec "$LARK_BIN" slack gateway serve \
   --agent \
+  --memory \
+  --memory-root "$HOME/WorkSpace/lark-cli-codex-app/.slack/conversations" \
   --agent-workspace "$HOME/WorkSpace/lark-cli-codex-app"
 ```
 
 Then run each script in a separate terminal, tmux pane, launchd job, or systemd
 user service.
 
-### Future Memory Extension
+### Slack Memory Files
 
-The current gateway stores raw normalized events in a JSONL event log, but it
-does not yet create channel folders, thread folders, or conversation summaries.
-
-A useful extension would be to add a Slack memory/audit store such as:
+With `--memory` enabled, the gateway creates a Slack memory/audit store under
+the configured `--memory-root`:
 
 ```text
-.slack/
-  gateway-events.jsonl
-  conversations/
-    T123/
-      C123/
-        channel.json
-        daily/
-          2026-06-10.jsonl
-        threads/
-          1710000000.000100/
-            events.jsonl
-            summary.md
-            memory.md
+.slack/conversations/
+  T123/
+    C123/
+      memory.md
+      daily/
+        2026-06-10.jsonl
+      threads/
+        1710000000.000100/
+          events.jsonl
+          summary.md
+          memory.md
 ```
 
-Recommended behavior for that extension:
+The files have different purposes:
 
-- Write each inbound/outbound message to a channel and thread JSONL file.
-- Periodically summarize long threads into `summary.md`.
-- Store durable user-approved facts in `memory.md`.
-- Include relevant summaries in the Codex prompt before dispatch.
-- Keep raw JSONL as audit data and summaries as prompt-efficient memory.
+- `daily/YYYY-MM-DD.jsonl` stores inbound records for channel-level audit.
+- `threads/<thread-ts>/events.jsonl` stores inbound records and final outbound
+  Codex replies for that thread.
+- Channel `memory.md` stores durable channel facts and preferences.
+- Thread `memory.md` stores durable thread-specific facts.
+- Thread `summary.md` stores prompt-efficient summaries for long threads.
 
-Until that is implemented, the cleanest memory pattern is to use a generic
-workspace such as `~/CodexChat` and explicitly ask Codex to update `MEMORY.md`
-or topic files when something should persist.
+The gateway loads channel memory, thread memory, and thread summary Markdown
+into the Codex prompt when those files exist. It does not automatically
+summarize long threads yet.
+
+Useful commands:
+
+```bash
+./lark slack memory path --channel D123 --thread-ts 1710000000.000100
+./lark slack memory show --channel D123 --scope channel
+./lark slack memory show --channel D123 --thread-ts 1710000000.000100 --scope summary
+./lark slack memory append --channel D123 --scope channel --text "- User prefers concise implementation plans."
+./lark slack memory append --channel D123 --thread-ts 1710000000.000100 --scope summary --text "- Thread discussed Slack memory setup."
+```
 
 ## 10. Recommended Way To Run
 
@@ -451,6 +488,8 @@ For normal use, run the Slack gateway as a long-lived local process:
 ```bash
 ./lark slack gateway serve \
   --agent \
+  --memory \
+  --memory-root "$HOME/WorkSpace/.slack/conversations" \
   --agent-workspace "$HOME/WorkSpace"
 ```
 
@@ -480,6 +519,9 @@ Common flags:
 | --- | --- |
 | `--agent` | Dispatch Slack messages to `codex exec`. |
 | `--agent-workspace PATH` | Workspace root used by Codex tasks. |
+| `--memory` | Persist Slack audit logs and load explicit memory Markdown into prompts. |
+| `--memory-root PATH` | Root folder for channel/thread memory and audit files. |
+| `--memory-max-section-chars N` | Per-section character limit for loaded memory Markdown. |
 | `--event-log PATH` | JSONL event log path. |
 | `--auto-reply-text TEXT` | Static reply template when not using the agent. |
 | `--desktop-worker` | Run the local desktop task worker in the gateway process. |

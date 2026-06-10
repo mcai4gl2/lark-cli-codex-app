@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -9,7 +10,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/yjwong/lark-cli/internal/config"
 	"github.com/yjwong/lark-cli/internal/output"
+	"github.com/yjwong/lark-cli/internal/platform"
 	slackgateway "github.com/yjwong/lark-cli/internal/slack"
+	"github.com/yjwong/lark-cli/internal/slackmemory"
 )
 
 var slackCmd = &cobra.Command{
@@ -30,12 +33,21 @@ var slackGatewayCmd = &cobra.Command{
 	Long:  "Run a local Slack gateway using Socket Mode.",
 }
 
+var slackMemoryCmd = &cobra.Command{
+	Use:   "memory",
+	Short: "Slack memory commands",
+	Long:  "Inspect and update local Slack memory files.",
+}
+
 var (
 	slackGatewayEventLogPath   string
 	slackGatewayAutoReplyText  string
 	slackGatewayAgentEnabled   bool
 	slackGatewayAgentWorkspace string
 	slackGatewayDesktopWorker  bool
+	slackGatewayMemoryEnabled  bool
+	slackGatewayMemoryRoot     string
+	slackGatewayMemoryMaxChars int
 )
 
 var (
@@ -67,6 +79,14 @@ var (
 	slackMsgReactRemoveReaction string
 )
 
+var (
+	slackMemoryTeamID   string
+	slackMemoryChannel  string
+	slackMemoryThreadTS string
+	slackMemoryScope    string
+	slackMemoryText     string
+)
+
 var slackGatewayServeCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Run the local Slack Socket Mode gateway",
@@ -78,7 +98,8 @@ a public HTTPS callback URL.
 Examples:
   lark slack gateway serve
   lark slack gateway serve --agent --agent-workspace ~/WorkSpace
-  lark slack gateway serve --event-log ~/.slack/gateway-events.jsonl`,
+  lark slack gateway serve --event-log ~/.slack/gateway-events.jsonl
+  lark slack gateway serve --memory --memory-root ~/.slack/conversations`,
 	Run: func(cmd *cobra.Command, args []string) {
 		agentCfg := slackgateway.DefaultAgentConfig(
 			config.GetSlackAgentEnabled(),
@@ -97,20 +118,32 @@ Examples:
 		}
 
 		cfg := slackgateway.Config{
-			AppToken:         config.GetSlackAppToken(),
-			BotToken:         config.GetSlackBotToken(),
-			BotUserID:        config.GetSlackBotUserID(),
-			EventLogPath:     slackGatewayEventLogPath,
-			AutoReplyText:    slackGatewayAutoReplyText,
-			Agent:            agentCfg,
-			DesktopWorker:    slackGatewayDesktopWorker,
-			DesktopQueueRoot: config.GetSlackDesktopTaskRoot(),
+			AppToken:              config.GetSlackAppToken(),
+			BotToken:              config.GetSlackBotToken(),
+			BotUserID:             config.GetSlackBotUserID(),
+			EventLogPath:          slackGatewayEventLogPath,
+			AutoReplyText:         slackGatewayAutoReplyText,
+			Agent:                 agentCfg,
+			DesktopWorker:         slackGatewayDesktopWorker,
+			DesktopQueueRoot:      config.GetSlackDesktopTaskRoot(),
+			MemoryEnabled:         config.GetSlackMemoryEnabled(),
+			MemoryRoot:            config.GetSlackMemoryRoot(),
+			MemoryMaxSectionChars: config.GetSlackMemoryMaxSectionChars(),
 		}
 		if cfg.EventLogPath == "" {
 			cfg.EventLogPath = config.GetSlackGatewayEventLogPath()
 		}
 		if cfg.AutoReplyText == "" {
 			cfg.AutoReplyText = config.GetSlackGatewayAutoReplyText()
+		}
+		if cmd.Flags().Changed("memory") {
+			cfg.MemoryEnabled = slackGatewayMemoryEnabled
+		}
+		if strings.TrimSpace(slackGatewayMemoryRoot) != "" {
+			cfg.MemoryRoot = strings.TrimSpace(slackGatewayMemoryRoot)
+		}
+		if cmd.Flags().Changed("memory-max-section-chars") {
+			cfg.MemoryMaxSectionChars = slackGatewayMemoryMaxChars
 		}
 
 		service := slackgateway.NewGateway(cfg)
@@ -122,6 +155,9 @@ Examples:
 			"agent_enabled":         cfg.Agent.Enabled,
 			"agent_workspace":       cfg.Agent.Workspace,
 			"desktop_worker":        cfg.DesktopWorker,
+			"memory_enabled":        cfg.MemoryEnabled,
+			"memory_root":           cfg.MemoryRoot,
+			"memory_max_chars":      cfg.MemoryMaxSectionChars,
 			"public_https_required": false,
 		})
 
@@ -315,6 +351,98 @@ Examples:
 	},
 }
 
+var slackMemoryPathCmd = &cobra.Command{
+	Use:   "path",
+	Short: "Print Slack memory paths",
+	Run: func(cmd *cobra.Command, args []string) {
+		validateSlackMemoryChannel()
+
+		store := slackmemory.NewStore(slackmemory.Config{Root: config.GetSlackMemoryRoot()})
+		event := slackMemoryEventFromFlags()
+		output.JSON(map[string]interface{}{
+			"root":           store.Root(),
+			"channel_memory": store.ChannelMemoryPath(event),
+			"thread_memory":  store.ThreadMemoryPath(event),
+			"thread_summary": store.ThreadSummaryPath(event),
+		})
+	},
+}
+
+var slackMemoryShowCmd = &cobra.Command{
+	Use:   "show",
+	Short: "Show Slack memory markdown",
+	Run: func(cmd *cobra.Command, args []string) {
+		validateSlackMemoryChannel()
+
+		store := slackmemory.NewStore(slackmemory.Config{Root: config.GetSlackMemoryRoot()})
+		path, err := slackMemoryPathForScope(store, slackMemoryEventFromFlags(), slackMemoryScope)
+		if err != nil {
+			output.Fatal("VALIDATION_ERROR", err)
+		}
+		text, err := store.ReadMarkdown(path, 0)
+		if err != nil {
+			output.Fatal("MEMORY_ERROR", err)
+		}
+		output.JSON(map[string]interface{}{"path": path, "text": text})
+	},
+}
+
+var slackMemoryAppendCmd = &cobra.Command{
+	Use:   "append",
+	Short: "Append text to Slack memory markdown",
+	Run: func(cmd *cobra.Command, args []string) {
+		validateSlackMemoryChannel()
+		if strings.TrimSpace(slackMemoryText) == "" {
+			output.Fatalf("VALIDATION_ERROR", "--text is required")
+		}
+
+		store := slackmemory.NewStore(slackmemory.Config{Root: config.GetSlackMemoryRoot()})
+		path, err := slackMemoryPathForScope(store, slackMemoryEventFromFlags(), slackMemoryScope)
+		if err != nil {
+			output.Fatal("VALIDATION_ERROR", err)
+		}
+		if err := store.AppendMarkdown(path, slackMemoryText); err != nil {
+			output.Fatal("MEMORY_ERROR", err)
+		}
+		output.JSON(map[string]interface{}{"success": true, "path": path})
+	},
+}
+
+func validateSlackMemoryChannel() {
+	if strings.TrimSpace(slackMemoryChannel) == "" {
+		output.Fatalf("VALIDATION_ERROR", "--channel is required")
+	}
+}
+
+func slackMemoryEventFromFlags() platform.MessageEvent {
+	return platform.MessageEvent{
+		Provider:  "slack",
+		TeamID:    slackMemoryTeamID,
+		ChannelID: slackMemoryChannel,
+		ThreadID:  slackMemoryThreadTS,
+		MessageID: slackMemoryThreadTS,
+	}
+}
+
+func slackMemoryPathForScope(store *slackmemory.Store, event platform.MessageEvent, scope string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(scope)) {
+	case "", "channel":
+		return store.ChannelMemoryPath(event), nil
+	case "thread":
+		if strings.TrimSpace(event.ThreadID) == "" {
+			return "", errors.New("--thread-ts is required for thread scope")
+		}
+		return store.ThreadMemoryPath(event), nil
+	case "summary":
+		if strings.TrimSpace(event.ThreadID) == "" {
+			return "", errors.New("--thread-ts is required for summary scope")
+		}
+		return store.ThreadSummaryPath(event), nil
+	default:
+		return "", errors.New("--scope must be one of: channel, thread, summary")
+	}
+}
+
 func init() {
 	slackMsgSendCmd.Flags().StringVar(&slackMsgSendChannel, "channel", "", "Slack channel ID (required)")
 	slackMsgSendCmd.Flags().StringVar(&slackMsgSendText, "text", "", "Message text (required)")
@@ -348,6 +476,18 @@ func init() {
 	slackGatewayServeCmd.Flags().BoolVar(&slackGatewayAgentEnabled, "agent", false, "dispatch inbound Slack messages to local codex exec tasks")
 	slackGatewayServeCmd.Flags().StringVar(&slackGatewayAgentWorkspace, "agent-workspace", "", "workspace root used when the local Codex agent executes tasks")
 	slackGatewayServeCmd.Flags().BoolVar(&slackGatewayDesktopWorker, "desktop-worker", false, "run the local desktop task worker inside the gateway process")
+	slackGatewayServeCmd.Flags().BoolVar(&slackGatewayMemoryEnabled, "memory", false, "persist Slack channel and thread memory/audit files")
+	slackGatewayServeCmd.Flags().StringVar(&slackGatewayMemoryRoot, "memory-root", "", "root directory for Slack memory/audit files")
+	slackGatewayServeCmd.Flags().IntVar(&slackGatewayMemoryMaxChars, "memory-max-section-chars", 2000, "maximum characters per memory section injected into Codex prompts")
+
+	for _, c := range []*cobra.Command{slackMemoryPathCmd, slackMemoryShowCmd, slackMemoryAppendCmd} {
+		c.Flags().StringVar(&slackMemoryTeamID, "team", "", "Slack team ID")
+		c.Flags().StringVar(&slackMemoryChannel, "channel", "", "Slack channel ID (required)")
+		c.Flags().StringVar(&slackMemoryThreadTS, "thread-ts", "", "Slack thread timestamp")
+	}
+	slackMemoryShowCmd.Flags().StringVar(&slackMemoryScope, "scope", "channel", "memory scope: channel, thread, or summary")
+	slackMemoryAppendCmd.Flags().StringVar(&slackMemoryScope, "scope", "channel", "memory scope: channel, thread, or summary")
+	slackMemoryAppendCmd.Flags().StringVar(&slackMemoryText, "text", "", "memory text to append")
 
 	slackMsgCmd.AddCommand(slackMsgSendCmd)
 	slackMsgCmd.AddCommand(slackMsgHistoryCmd)
@@ -355,7 +495,9 @@ func init() {
 	slackMsgCmd.AddCommand(slackMsgReactCmd)
 	slackMsgReactCmd.AddCommand(slackMsgReactListCmd)
 	slackMsgReactCmd.AddCommand(slackMsgReactRemoveCmd)
+	slackMemoryCmd.AddCommand(slackMemoryPathCmd, slackMemoryShowCmd, slackMemoryAppendCmd)
 	slackGatewayCmd.AddCommand(slackGatewayServeCmd)
 	slackCmd.AddCommand(slackMsgCmd)
 	slackCmd.AddCommand(slackGatewayCmd)
+	slackCmd.AddCommand(slackMemoryCmd)
 }

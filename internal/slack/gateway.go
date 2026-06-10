@@ -14,6 +14,7 @@ import (
 	"github.com/yjwong/lark-cli/internal/desktop"
 	"github.com/yjwong/lark-cli/internal/inbound"
 	"github.com/yjwong/lark-cli/internal/platform"
+	"github.com/yjwong/lark-cli/internal/slackmemory"
 )
 
 // AgentConfig aliases the shared Codex agent config for Slack gateway callers.
@@ -21,16 +22,19 @@ type AgentConfig = agent.Config
 
 // Config configures the Slack Socket Mode gateway.
 type Config struct {
-	AppToken         string
-	BotToken         string
-	BotUserID        string
-	EventLogPath     string
-	AutoReplyText    string
-	Agent            AgentConfig
-	DesktopWorker    bool
-	DesktopQueueRoot string
-	Messenger        platform.Messenger
-	APIBaseURL       string
+	AppToken              string
+	BotToken              string
+	BotUserID             string
+	EventLogPath          string
+	AutoReplyText         string
+	Agent                 AgentConfig
+	DesktopWorker         bool
+	DesktopQueueRoot      string
+	MemoryEnabled         bool
+	MemoryRoot            string
+	MemoryMaxSectionChars int
+	Messenger             platform.Messenger
+	APIBaseURL            string
 }
 
 // Gateway receives Slack Socket Mode events and routes them through shared code.
@@ -43,6 +47,7 @@ type Gateway struct {
 	agent     *agent.Runner
 	desktop   *desktop.Queue
 	worker    *desktop.Worker
+	memory    *slackmemory.Store
 }
 
 // NewGateway returns a Slack gateway service.
@@ -56,6 +61,12 @@ func NewGateway(cfg Config) *Gateway {
 	queueRoot := strings.TrimSpace(cfg.DesktopQueueRoot)
 	if queueRoot == "" {
 		queueRoot = ".slack/desktop-tasks"
+	}
+	var memoryStore *slackmemory.Store
+	if cfg.MemoryEnabled && strings.TrimSpace(cfg.MemoryRoot) != "" {
+		memoryStore = slackmemory.NewStore(slackmemory.Config{Root: cfg.MemoryRoot})
+		cfg.Agent.ContextProvider = memoryPromptProvider{store: memoryStore, maxSectionChars: cfg.MemoryMaxSectionChars}
+		cfg.Agent.ReplyObserver = memoryReplyObserver{store: memoryStore}
 	}
 	queue := desktop.NewQueueWithMessenger(queueRoot, messenger)
 	return &Gateway{
@@ -71,6 +82,7 @@ func NewGateway(cfg Config) *Gateway {
 		agent:   agent.NewRunnerWithMessenger(cfg.Agent, logger, messenger),
 		desktop: queue,
 		worker:  desktop.NewWorker(queue, logger, desktop.WorkerConfig{}),
+		memory:  memoryStore,
 	}
 }
 
@@ -177,6 +189,11 @@ func (g *Gateway) handleEvent(ctx context.Context, payload json.RawMessage) erro
 	if err := g.handler.Process(entry); err != nil {
 		return err
 	}
+	if g.memory != nil {
+		if err := g.memory.RecordInbound(entry); err != nil {
+			return err
+		}
+	}
 
 	if request, ok := desktop.ExtractRequest(entry.MessageText); ok {
 		task, err := g.desktop.Enqueue(entry, request)
@@ -214,4 +231,26 @@ func DefaultAgentConfig(enabled bool, codexBinary, workspace, model, ackText str
 		ResultMaxChars: resultMaxChars,
 		Timeout:        time.Duration(timeoutMinutes) * time.Minute,
 	}
+}
+
+type memoryPromptProvider struct {
+	store           *slackmemory.Store
+	maxSectionChars int
+}
+
+func (p memoryPromptProvider) PromptContext(entry inbound.LoggedEvent) (string, error) {
+	return slackmemory.BuildPromptContext(p.store, entry, slackmemory.ContextOptions{
+		MaxSectionChars: p.maxSectionChars,
+	})
+}
+
+type memoryReplyObserver struct {
+	store *slackmemory.Store
+}
+
+func (o memoryReplyObserver) ObserveReply(event platform.MessageEvent, text string) error {
+	if o.store == nil {
+		return nil
+	}
+	return o.store.RecordOutbound(event, text)
 }

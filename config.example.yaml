@@ -47,6 +47,12 @@ slack:
     # Optional plain-text auto-reply template
     # Supported placeholders: {{text}}, {{channel_id}}, {{thread_id}}, {{message_id}}, {{user_id}}
     auto_reply_text: ""
+  memory:
+    enabled: false
+    # Root directory for channel/thread audit logs and memory markdown files.
+    root: ".slack/conversations"
+    # Maximum characters loaded from each memory file into Codex prompts.
+    max_section_chars: 2000
   agent:
     enabled: false
     codex_binary: "codex"

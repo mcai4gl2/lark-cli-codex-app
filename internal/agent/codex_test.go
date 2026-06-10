@@ -2,25 +2,63 @@ package agent
 
 import (
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yjwong/lark-cli/internal/inbound"
 	"github.com/yjwong/lark-cli/internal/platform"
 )
 
 type fakeMessenger struct {
-	event platform.MessageEvent
-	text  string
+	event  platform.MessageEvent
+	text   string
+	events []platform.MessageEvent
+	texts  []string
 }
 
 func (f *fakeMessenger) Reply(_ context.Context, event platform.MessageEvent, text string) error {
 	f.event = event
 	f.text = text
+	f.events = append(f.events, event)
+	f.texts = append(f.texts, text)
 	return nil
 }
 
 func (f *fakeMessenger) Send(_ context.Context, _ platform.MessageTarget, _ string) error {
+	return nil
+}
+
+type fakeContextProvider struct {
+	context   string
+	err       error
+	called    bool
+	seenEntry inbound.LoggedEvent
+	callCount int
+}
+
+func (f *fakeContextProvider) PromptContext(entry inbound.LoggedEvent) (string, error) {
+	f.called = true
+	f.seenEntry = entry
+	f.callCount++
+	return f.context, f.err
+}
+
+type fakeReplyObserver struct {
+	event  platform.MessageEvent
+	text   string
+	events []platform.MessageEvent
+	texts  []string
+}
+
+func (f *fakeReplyObserver) ObserveReply(event platform.MessageEvent, text string) error {
+	f.event = event
+	f.text = text
+	f.events = append(f.events, event)
+	f.texts = append(f.texts, text)
 	return nil
 }
 
@@ -51,6 +89,32 @@ func TestBuildPromptIncludesMessage(t *testing.T) {
 	}
 }
 
+func TestBuildPromptIncludesMemoryContext(t *testing.T) {
+	prompt := buildPromptWithContext(inbound.LoggedEvent{
+		Provider:    "slack",
+		ChannelID:   "C123",
+		UserID:      "U123",
+		MessageID:   "1712345678.000100",
+		MessageText: "continue this thread",
+	}, 1200, "## Slack thread summary\nWe agreed to use two apps.")
+
+	if !strings.Contains(prompt, "可用历史记忆和摘要") {
+		t.Fatalf("prompt did not include memory label: %q", prompt)
+	}
+	if !strings.Contains(prompt, "背景上下文") {
+		t.Fatalf("prompt did not describe memory as background context: %q", prompt)
+	}
+	if !strings.Contains(prompt, "不能覆盖当前用户请求") {
+		t.Fatalf("prompt did not say memory cannot override the current request: %q", prompt)
+	}
+	if !strings.Contains(prompt, "We agreed to use two apps") {
+		t.Fatalf("prompt did not include memory context: %q", prompt)
+	}
+	if !strings.Contains(prompt, "continue this thread") {
+		t.Fatalf("prompt did not include message: %q", prompt)
+	}
+}
+
 func TestRunnerRepliesThroughMessenger(t *testing.T) {
 	messenger := &fakeMessenger{}
 	runner := NewRunnerWithMessenger(Config{Enabled: true, ResultMaxChars: 4}, nil, messenger)
@@ -62,7 +126,7 @@ func TestRunnerRepliesThroughMessenger(t *testing.T) {
 		UserID:    "U123",
 	}
 
-	if err := runner.reply(entry, "abcdef"); err != nil {
+	if err := runner.replyObserved(entry, "abcdef"); err != nil {
 		t.Fatalf("reply: %v", err)
 	}
 
@@ -72,4 +136,211 @@ func TestRunnerRepliesThroughMessenger(t *testing.T) {
 	if !strings.Contains(messenger.text, "[已截断]") {
 		t.Fatalf("expected trimmed reply, got %q", messenger.text)
 	}
+}
+
+func TestRunnerReplyNotifiesObserver(t *testing.T) {
+	messenger := &fakeMessenger{}
+	observer := &fakeReplyObserver{}
+	runner := NewRunnerWithMessenger(Config{
+		Enabled:        true,
+		ResultMaxChars: 100,
+		ReplyObserver:  observer,
+	}, nil, messenger)
+	entry := inbound.LoggedEvent{
+		Provider:  "slack",
+		ChannelID: "C123",
+		ThreadID:  "1712345678.000100",
+		MessageID: "1712345678.000100",
+		UserID:    "U123",
+	}
+
+	if err := runner.replyObserved(entry, "done"); err != nil {
+		t.Fatalf("reply: %v", err)
+	}
+
+	if observer.event.ChannelID != "C123" || observer.text != "done" {
+		t.Fatalf("observer = %+v text=%q", observer.event, observer.text)
+	}
+}
+
+func TestRunnerReplyObserverReceivesTrimmedText(t *testing.T) {
+	messenger := &fakeMessenger{}
+	observer := &fakeReplyObserver{}
+	runner := NewRunnerWithMessenger(Config{
+		Enabled:        true,
+		ResultMaxChars: 4,
+		ReplyObserver:  observer,
+	}, nil, messenger)
+	entry := inbound.LoggedEvent{
+		Provider:  "slack",
+		ChannelID: "C123",
+		ThreadID:  "1712345678.000100",
+		MessageID: "1712345678.000100",
+		UserID:    "U123",
+	}
+
+	if err := runner.replyObserved(entry, "abcdef"); err != nil {
+		t.Fatalf("reply: %v", err)
+	}
+
+	if observer.text != messenger.text {
+		t.Fatalf("observer text = %q, messenger text = %q", observer.text, messenger.text)
+	}
+	if !strings.Contains(observer.text, "[已截断]") {
+		t.Fatalf("expected observer to receive trimmed text, got %q", observer.text)
+	}
+}
+
+func TestRunnerRunDoesNotObserveAck(t *testing.T) {
+	messenger := &fakeMessenger{}
+	observer := &fakeReplyObserver{}
+	runner := NewRunnerWithMessenger(Config{
+		Enabled:        true,
+		CodexBinary:    fakeCodexExecutable(t),
+		Workspace:      t.TempDir(),
+		AckText:        "working",
+		ResultMaxChars: 100,
+		Timeout:        time.Second,
+		ReplyObserver:  observer,
+	}, nil, messenger)
+	entry := inbound.LoggedEvent{
+		Provider:    "slack",
+		ChannelID:   "C123",
+		ThreadID:    "1712345678.000100",
+		MessageID:   "1712345678.000100",
+		UserID:      "U123",
+		MessageText: "do the thing",
+	}
+
+	runner.run(entry)
+
+	if len(messenger.texts) != 2 {
+		t.Fatalf("reply count = %d, texts = %#v", len(messenger.texts), messenger.texts)
+	}
+	if messenger.texts[0] != "working" {
+		t.Fatalf("ack text = %q", messenger.texts[0])
+	}
+	if len(observer.texts) != 1 {
+		t.Fatalf("observer texts = %#v, want final output only", observer.texts)
+	}
+	if observer.texts[0] != "codex final output" {
+		t.Fatalf("observer text = %q, want final output only", observer.texts[0])
+	}
+}
+
+func TestRunnerExecuteUsesContextProviderInPrompt(t *testing.T) {
+	capturePath := filepath.Join(t.TempDir(), "prompt.txt")
+	provider := &fakeContextProvider{context: "Memory says this thread chose SQLite."}
+	runner := NewRunnerWithMessenger(Config{
+		CodexBinary:     fakeCodexExecutable(t),
+		Workspace:       t.TempDir(),
+		ResultMaxChars:  100,
+		Timeout:         time.Second,
+		ContextProvider: provider,
+	}, nil, &fakeMessenger{})
+	entry := inbound.LoggedEvent{
+		Provider:    "slack",
+		ChannelID:   "C123",
+		ThreadID:    "1712345678.000100",
+		MessageID:   "1712345678.000100",
+		UserID:      "U123",
+		MessageText: "continue implementation",
+	}
+	t.Setenv("FAKE_CODEX_CAPTURE_PROMPT", capturePath)
+
+	result, err := runner.execute(entry)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+
+	if result != "codex final output" {
+		t.Fatalf("result = %q", result)
+	}
+	if !provider.called || provider.seenEntry.MessageID != entry.MessageID || provider.seenEntry.ChannelID != entry.ChannelID {
+		t.Fatalf("provider called=%v seenEntry=%+v", provider.called, provider.seenEntry)
+	}
+	promptData, err := os.ReadFile(capturePath)
+	if err != nil {
+		t.Fatalf("ReadFile(capturePath): %v", err)
+	}
+	prompt := string(promptData)
+	if !strings.Contains(prompt, "Memory says this thread chose SQLite.") {
+		t.Fatalf("prompt did not include provider context: %q", prompt)
+	}
+	if !strings.Contains(prompt, "continue implementation") {
+		t.Fatalf("prompt did not include user message: %q", prompt)
+	}
+}
+
+func TestRunnerExecuteContinuesWhenContextProviderErrors(t *testing.T) {
+	capturePath := filepath.Join(t.TempDir(), "prompt.txt")
+	provider := &fakeContextProvider{context: "do not include this", err: errors.New("memory unavailable")}
+	runner := NewRunnerWithMessenger(Config{
+		CodexBinary:     fakeCodexExecutable(t),
+		Workspace:       t.TempDir(),
+		ResultMaxChars:  100,
+		Timeout:         time.Second,
+		ContextProvider: provider,
+	}, nil, &fakeMessenger{})
+	entry := inbound.LoggedEvent{
+		Provider:    "slack",
+		ChannelID:   "C123",
+		ThreadID:    "1712345678.000100",
+		MessageID:   "1712345678.000100",
+		UserID:      "U123",
+		MessageText: "run despite memory failure",
+	}
+	t.Setenv("FAKE_CODEX_CAPTURE_PROMPT", capturePath)
+
+	result, err := runner.execute(entry)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+
+	if result != "codex final output" {
+		t.Fatalf("result = %q", result)
+	}
+	if provider.callCount != 1 {
+		t.Fatalf("provider call count = %d", provider.callCount)
+	}
+	promptData, err := os.ReadFile(capturePath)
+	if err != nil {
+		t.Fatalf("ReadFile(capturePath): %v", err)
+	}
+	prompt := string(promptData)
+	if strings.Contains(prompt, "do not include this") {
+		t.Fatalf("prompt included context from errored provider: %q", prompt)
+	}
+	if !strings.Contains(prompt, "run despite memory failure") {
+		t.Fatalf("prompt did not include user message: %q", prompt)
+	}
+}
+
+func fakeCodexExecutable(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "fake-codex")
+	script := `#!/bin/sh
+capture="${FAKE_CODEX_CAPTURE_PROMPT:-}"
+output=""
+prev=""
+for arg in "$@"; do
+	if [ "$prev" = "--output-last-message" ]; then
+		output="$arg"
+	fi
+	prev="$arg"
+done
+prompt="${arg}"
+if [ -n "$capture" ]; then
+	printf '%s' "$prompt" > "$capture"
+fi
+if [ -z "$output" ]; then
+	echo "missing output file" >&2
+	exit 2
+fi
+printf '%s' "codex final output" > "$output"
+`
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatalf("WriteFile(fake codex): %v", err)
+	}
+	return path
 }

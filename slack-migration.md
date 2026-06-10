@@ -387,6 +387,17 @@ Implementation notes:
 - Added `lark slack msg react remove --channel C123 --ts 1710000000.000100 --reaction eyes` using `reactions.remove`.
 - Reaction commands require Slack `reactions:read` for list and `reactions:write` for add/remove.
 
+### Memory Extension
+
+Status: Complete for filesystem-backed audit and explicit memory.
+
+- [x] Store Slack inbound events in channel daily logs and thread logs.
+- [x] Store outbound replies in thread logs.
+- [x] Support channel memory, thread memory, and thread summaries as Markdown.
+- [x] Inject existing memory Markdown into Codex prompts.
+- [x] Add CLI commands for memory path/show/append.
+- [ ] Automatic summarization remains deferred.
+
 ### Phase 4: Packaging and Naming
 
 - Decide whether this remains a dual-provider repo or becomes a Slack-focused fork.

@@ -18,6 +18,9 @@ func TestSlackConfigDefaultsAndEnvBindings(t *testing.T) {
 	t.Setenv("SLACK_AGENT_WORKSPACE", "slack-work")
 	t.Setenv("SLACK_AGENT_RESULT_MAX_CHARS", "3333")
 	t.Setenv("SLACK_GATEWAY_EVENT_LOG", "custom/slack-events.jsonl")
+	t.Setenv("SLACK_MEMORY_ENABLED", "true")
+	t.Setenv("SLACK_MEMORY_ROOT", "custom/slack-memory")
+	t.Setenv("SLACK_MEMORY_MAX_SECTION_CHARS", "1234")
 
 	if err := Init(); err != nil {
 		t.Fatalf("Init() error = %v", err)
@@ -44,6 +47,15 @@ func TestSlackConfigDefaultsAndEnvBindings(t *testing.T) {
 	if got := GetSlackGatewayEventLogPath(); got != filepath.Join(tmp, "custom/slack-events.jsonl") {
 		t.Fatalf("GetSlackGatewayEventLogPath() = %q", got)
 	}
+	if !GetSlackMemoryEnabled() {
+		t.Fatalf("GetSlackMemoryEnabled() = false")
+	}
+	if got := GetSlackMemoryRoot(); got != filepath.Join(tmp, "custom/slack-memory") {
+		t.Fatalf("GetSlackMemoryRoot() = %q", got)
+	}
+	if got := GetSlackMemoryMaxSectionChars(); got != 1234 {
+		t.Fatalf("GetSlackMemoryMaxSectionChars() = %d", got)
+	}
 }
 
 func TestSlackConfigDefaultsUseSlackStateDir(t *testing.T) {
@@ -61,7 +73,31 @@ func TestSlackConfigDefaultsUseSlackStateDir(t *testing.T) {
 	if got := GetSlackDesktopTaskRoot(); got != filepath.Join(tmp, ".slack", "desktop-tasks") {
 		t.Fatalf("GetSlackDesktopTaskRoot() = %q", got)
 	}
+	if got := GetSlackMemoryRoot(); got != filepath.Join(tmp, ".slack", "conversations") {
+		t.Fatalf("GetSlackMemoryRoot() = %q", got)
+	}
+	if GetSlackMemoryEnabled() {
+		t.Fatalf("GetSlackMemoryEnabled() = true")
+	}
+	if got := GetSlackMemoryMaxSectionChars(); got != 2000 {
+		t.Fatalf("GetSlackMemoryMaxSectionChars() = %d", got)
+	}
 	if got := GetSlackAgentResultMaxChars(); got != 3500 {
 		t.Fatalf("GetSlackAgentResultMaxChars() = %d", got)
+	}
+}
+
+func TestSlackMemoryMaxSectionCharsFallback(t *testing.T) {
+	viper.Reset()
+	tmp := t.TempDir()
+	t.Setenv("LARK_CONFIG_DIR", filepath.Join(tmp, ".lark"))
+	t.Setenv("SLACK_MEMORY_MAX_SECTION_CHARS", "0")
+
+	if err := Init(); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	if got := GetSlackMemoryMaxSectionChars(); got != 2000 {
+		t.Fatalf("GetSlackMemoryMaxSectionChars() = %d", got)
 	}
 }
