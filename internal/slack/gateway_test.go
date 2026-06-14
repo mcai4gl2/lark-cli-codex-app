@@ -1,8 +1,10 @@
 package slack
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -34,6 +36,19 @@ func (m *captureMessenger) Reply(_ context.Context, event platform.MessageEvent,
 
 func (m *captureMessenger) Send(_ context.Context, _ platform.MessageTarget, _ string) error {
 	return nil
+}
+
+func writeNoReactionResponse(w http.ResponseWriter, channel, ts string) {
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"ok":      true,
+		"type":    "message",
+		"channel": channel,
+		"message": map[string]interface{}{
+			"type":      "message",
+			"ts":        ts,
+			"reactions": []map[string]interface{}{},
+		},
+	})
 }
 
 func TestServiceHandleEventQueuesDesktopRequest(t *testing.T) {
@@ -238,36 +253,40 @@ func TestGatewayCatchUpProcessesParticipatingThreadMessages(t *testing.T) {
 		Oldest  string `json:"oldest"`
 	}
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/conversations.replies" {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/reactions.get":
+			writeNoReactionResponse(w, "C123", "1710000000.000100")
+		case "/conversations.replies":
+			if r.Method != http.MethodGet {
+				t.Fatalf("method = %s", r.Method)
+			}
+			gotRequest.Channel = r.URL.Query().Get("channel")
+			gotRequest.TS = r.URL.Query().Get("ts")
+			gotRequest.Limit, _ = strconv.Atoi(r.URL.Query().Get("limit"))
+			gotRequest.Oldest = r.URL.Query().Get("oldest")
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"ok": true,
+				"messages": []map[string]string{
+					{
+						"type":      "message",
+						"user":      "U234",
+						"text":      "missed reply",
+						"ts":        "1710000000.000300",
+						"thread_ts": "1710000000.000100",
+					},
+					{
+						"type":      "message",
+						"user":      "U234",
+						"text":      "already processed root",
+						"ts":        "1710000000.000100",
+						"thread_ts": "1710000000.000100",
+					},
+				},
+			})
+		default:
 			t.Fatalf("unexpected API path = %s", r.URL.Path)
 		}
-		if r.Method != http.MethodGet {
-			t.Fatalf("method = %s", r.Method)
-		}
-		gotRequest.Channel = r.URL.Query().Get("channel")
-		gotRequest.TS = r.URL.Query().Get("ts")
-		gotRequest.Limit, _ = strconv.Atoi(r.URL.Query().Get("limit"))
-		gotRequest.Oldest = r.URL.Query().Get("oldest")
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"ok": true,
-			"messages": []map[string]string{
-				{
-					"type":      "message",
-					"user":      "U234",
-					"text":      "missed reply",
-					"ts":        "1710000000.000300",
-					"thread_ts": "1710000000.000100",
-				},
-				{
-					"type":      "message",
-					"user":      "U234",
-					"text":      "already processed root",
-					"ts":        "1710000000.000100",
-					"thread_ts": "1710000000.000100",
-				},
-			},
-		})
 	}))
 	defer apiServer.Close()
 
@@ -296,7 +315,7 @@ func TestGatewayCatchUpProcessesParticipatingThreadMessages(t *testing.T) {
 		t.Fatalf("catchUp() error = %v", err)
 	}
 
-	if gotRequest.Channel != "C123" || gotRequest.TS != "1710000000.000100" || gotRequest.Limit != 100 || gotRequest.Oldest != "1710000000.000100" {
+	if gotRequest.Channel != "C123" || gotRequest.TS != "1710000000.000100" || gotRequest.Limit != slackThreadCatchUpLimit || gotRequest.Oldest != "1710000000.000100" {
 		t.Fatalf("conversations.replies request = %+v", gotRequest)
 	}
 	data, err := os.ReadFile(eventLogPath)
@@ -327,22 +346,26 @@ func TestGatewayCatchUpDoesNotAdvanceStateWhenProcessingFails(t *testing.T) {
 		ThreadTS:  "1710000000.000100",
 	}
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/conversations.replies" {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/reactions.get":
+			writeNoReactionResponse(w, "C123", "1710000000.000100")
+		case "/conversations.replies":
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"ok": true,
+				"messages": []map[string]string{
+					{
+						"type":      "message",
+						"user":      "U234",
+						"text":      "missed reply",
+						"ts":        "1710000000.000300",
+						"thread_ts": "1710000000.000100",
+					},
+				},
+			})
+		default:
 			t.Fatalf("unexpected API path = %s", r.URL.Path)
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"ok": true,
-			"messages": []map[string]string{
-				{
-					"type":      "message",
-					"user":      "U234",
-					"text":      "missed reply",
-					"ts":        "1710000000.000300",
-					"thread_ts": "1710000000.000100",
-				},
-			},
-		})
 	}))
 	defer apiServer.Close()
 
@@ -438,23 +461,27 @@ func TestGatewayCatchUpSkipsAlreadyClaimedMessages(t *testing.T) {
 	}
 	var requests atomic.Int32
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/conversations.replies" {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/reactions.get":
+			writeNoReactionResponse(w, "C123", "1710000000.000100")
+		case "/conversations.replies":
+			requests.Add(1)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"ok": true,
+				"messages": []map[string]string{
+					{
+						"type":      "message",
+						"user":      "U234",
+						"text":      "already claimed reply",
+						"ts":        "1710000000.000300",
+						"thread_ts": "1710000000.000100",
+					},
+				},
+			})
+		default:
 			t.Fatalf("unexpected API path = %s", r.URL.Path)
 		}
-		requests.Add(1)
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"ok": true,
-			"messages": []map[string]string{
-				{
-					"type":      "message",
-					"user":      "U234",
-					"text":      "already claimed reply",
-					"ts":        "1710000000.000300",
-					"thread_ts": "1710000000.000100",
-				},
-			},
-		})
 	}))
 	defer apiServer.Close()
 
@@ -542,6 +569,8 @@ func TestGatewayServeRunsCatchUpAfterSocketConnect(t *testing.T) {
 				"ok":  true,
 				"url": "ws" + strings.TrimPrefix(socketServer.URL, "http"),
 			})
+		case "/reactions.get":
+			writeNoReactionResponse(w, "C123", "1710000000.000100")
 		case "/conversations.replies":
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"ok": true,
@@ -620,6 +649,294 @@ func TestGatewayServeRunsCatchUpAfterSocketConnect(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "after connect catchup") {
 		t.Fatalf("event log = %q", string(data))
+	}
+}
+
+func TestGatewayServePollsCatchUpWhileConnected(t *testing.T) {
+	memoryRoot := t.TempDir()
+	eventLogPath := filepath.Join(t.TempDir(), "events.jsonl")
+	key := RecoveryThreadKey{
+		TeamID:    "T123",
+		ChannelID: "C123",
+		ThreadTS:  "1710000000.000100",
+	}
+	var repliesCalls atomic.Int32
+	var upgrader websocket.Upgrader
+
+	socketServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Errorf("Upgrade() error = %v", err)
+			return
+		}
+		defer conn.Close()
+		<-r.Context().Done()
+	}))
+	defer socketServer.Close()
+
+	recovery := NewRecoveryStore(filepath.Join(memoryRoot, ".state", "recover-state.json"))
+	if err := recovery.MarkParticipating(key); err != nil {
+		t.Fatalf("MarkParticipating() error = %v", err)
+	}
+	if err := recovery.MarkProcessed(key, "1710000000.000100"); err != nil {
+		t.Fatalf("MarkProcessed() error = %v", err)
+	}
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/apps.connections.open":
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"ok":  true,
+				"url": "ws" + strings.TrimPrefix(socketServer.URL, "http"),
+			})
+		case "/reactions.get":
+			writeNoReactionResponse(w, "C123", "1710000000.000100")
+		case "/conversations.replies":
+			call := repliesCalls.Add(1)
+			messages := []map[string]string{
+				{
+					"type":      "message",
+					"user":      "U234",
+					"text":      "already processed root",
+					"ts":        "1710000000.000100",
+					"thread_ts": "1710000000.000100",
+				},
+			}
+			if call > 1 {
+				messages = append(messages, map[string]string{
+					"type":      "message",
+					"user":      "U234",
+					"text":      "polled reply",
+					"ts":        "1710000000.000300",
+					"thread_ts": "1710000000.000100",
+				})
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"ok":       true,
+				"messages": messages,
+			})
+		default:
+			t.Errorf("unexpected API path = %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer apiServer.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	service := NewGateway(Config{
+		AppToken:             "xapp-test",
+		BotToken:             "xoxb-test",
+		EventLogPath:         eventLogPath,
+		BotUserID:            "U999",
+		Messenger:            &captureMessenger{},
+		MemoryRoot:           memoryRoot,
+		RecoverMode:          RecoverModeThread,
+		RecoveryPollInterval: 10 * time.Millisecond,
+		APIBaseURL:           apiServer.URL,
+		Agent: AgentConfig{
+			Enabled: false,
+		},
+		DesktopQueueRoot: t.TempDir(),
+	})
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- service.Serve(ctx)
+	}()
+
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	timeout := time.After(3 * time.Second)
+	for polled := false; !polled; {
+		select {
+		case err := <-errCh:
+			t.Fatalf("Serve() returned before polling catch-up: %v", err)
+		case <-ticker.C:
+			data, err := os.ReadFile(eventLogPath)
+			if err == nil && strings.Contains(string(data), "polled reply") {
+				polled = true
+				cancel()
+			}
+			if err != nil && !os.IsNotExist(err) {
+				t.Fatalf("ReadFile(event log): %v", err)
+			}
+		case <-timeout:
+			t.Fatal("timed out waiting for catch-up poll")
+		}
+	}
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("Serve() error after cancel = %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for Serve() shutdown")
+	}
+}
+
+func TestGatewayCatchUpStopsTrackingCheckmarkedThread(t *testing.T) {
+	memoryRoot := t.TempDir()
+	key := RecoveryThreadKey{
+		TeamID:    "T123",
+		ChannelID: "C123",
+		ThreadTS:  "1710000000.000100",
+	}
+	var repliesCalls atomic.Int32
+	var reactionsCalls atomic.Int32
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/reactions.get":
+			reactionsCalls.Add(1)
+			if r.Method != http.MethodGet {
+				t.Fatalf("method = %s", r.Method)
+			}
+			if r.URL.Query().Get("channel") != "C123" || r.URL.Query().Get("timestamp") != "1710000000.000100" {
+				t.Fatalf("reactions.get query = %s", r.URL.RawQuery)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"ok":      true,
+				"type":    "message",
+				"channel": "C123",
+				"message": map[string]interface{}{
+					"type": "message",
+					"user": "U234",
+					"ts":   "1710000000.000100",
+					"reactions": []map[string]interface{}{
+						{
+							"name":  "white_check_mark",
+							"users": []string{"U234"},
+							"count": 1,
+						},
+					},
+				},
+			})
+		case "/conversations.replies":
+			repliesCalls.Add(1)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"ok":       true,
+				"messages": []map[string]string{},
+			})
+		default:
+			t.Errorf("unexpected API path = %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer apiServer.Close()
+
+	service := NewGateway(Config{
+		BotToken:     "xoxb-test",
+		EventLogPath: filepath.Join(t.TempDir(), "events.jsonl"),
+		BotUserID:    "U999",
+		Messenger:    &captureMessenger{},
+		MemoryRoot:   memoryRoot,
+		RecoverMode:  RecoverModeThread,
+		APIBaseURL:   apiServer.URL,
+		Agent: AgentConfig{
+			Enabled: false,
+		},
+		DesktopQueueRoot: t.TempDir(),
+	})
+	var logs bytes.Buffer
+	service.logger = log.New(&logs, "", 0)
+
+	if err := service.recovery.MarkProcessed(key, "1710000000.000100"); err != nil {
+		t.Fatalf("MarkProcessed() error = %v", err)
+	}
+
+	if err := service.catchUp(context.Background()); err != nil {
+		t.Fatalf("catchUp() error = %v", err)
+	}
+
+	if reactionsCalls.Load() != 1 {
+		t.Fatalf("reactions.get calls = %d", reactionsCalls.Load())
+	}
+	if repliesCalls.Load() != 0 {
+		t.Fatalf("conversations.replies calls = %d", repliesCalls.Load())
+	}
+	if !strings.Contains(logs.String(), "thread 1710000000.000100, user U234 ticked at ") || !strings.Contains(logs.String(), ", stop tracking") {
+		t.Fatalf("logs = %q", logs.String())
+	}
+	threads, err := service.recovery.Threads()
+	if err != nil {
+		t.Fatalf("Threads() error = %v", err)
+	}
+	if len(threads) != 0 {
+		t.Fatalf("threads = %+v", threads)
+	}
+}
+
+func TestGatewayCatchUpStopsTrackingStaleThread(t *testing.T) {
+	memoryRoot := t.TempDir()
+	key := RecoveryThreadKey{
+		TeamID:    "T123",
+		ChannelID: "C123",
+		ThreadTS:  "1710000000.000100",
+	}
+	var apiCalls atomic.Int32
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		apiCalls.Add(1)
+		t.Errorf("unexpected API path = %s", r.URL.Path)
+		http.NotFound(w, r)
+	}))
+	defer apiServer.Close()
+
+	service := NewGateway(Config{
+		BotToken:     "xoxb-test",
+		EventLogPath: filepath.Join(t.TempDir(), "events.jsonl"),
+		BotUserID:    "U999",
+		Messenger:    &captureMessenger{},
+		MemoryRoot:   memoryRoot,
+		RecoverMode:  RecoverModeThread,
+		APIBaseURL:   apiServer.URL,
+		Agent: AgentConfig{
+			Enabled: false,
+		},
+		DesktopQueueRoot: t.TempDir(),
+	})
+	var logs bytes.Buffer
+	service.logger = log.New(&logs, "", 0)
+
+	if err := service.recovery.MarkProcessed(key, "1710000000.000100"); err != nil {
+		t.Fatalf("MarkProcessed() error = %v", err)
+	}
+	statePath := service.recovery.Path()
+	staleState := `{
+  "threads": [
+    {
+      "key": {
+        "team_id": "T123",
+        "channel_id": "C123",
+        "thread_ts": "1710000000.000100"
+      },
+      "last_processed_ts": "1710000000.000100",
+      "last_seen_at": "` + time.Now().Add(-25*time.Hour).Format(time.RFC3339Nano) + `"
+    }
+  ]
+}
+`
+	if err := os.WriteFile(statePath, []byte(staleState), 0o600); err != nil {
+		t.Fatalf("WriteFile(state): %v", err)
+	}
+
+	if err := service.catchUp(context.Background()); err != nil {
+		t.Fatalf("catchUp() error = %v", err)
+	}
+
+	if apiCalls.Load() != 0 {
+		t.Fatalf("API calls = %d", apiCalls.Load())
+	}
+	if !strings.Contains(logs.String(), "thread 1710000000.000100 last seen at ") || !strings.Contains(logs.String(), "older than 24h0m0s, stop tracking") {
+		t.Fatalf("logs = %q", logs.String())
+	}
+	threads, err := service.recovery.Threads()
+	if err != nil {
+		t.Fatalf("Threads() error = %v", err)
+	}
+	if len(threads) != 0 {
+		t.Fatalf("threads = %+v", threads)
 	}
 }
 

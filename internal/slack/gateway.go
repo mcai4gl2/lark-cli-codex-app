@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -36,6 +37,7 @@ type Config struct {
 	MemoryRoot             string
 	MemoryMaxSectionChars  int
 	RecoverMode            RecoverMode
+	RecoveryPollInterval   time.Duration
 	ProcessingReactionName string
 	Messenger              platform.Messenger
 	APIBaseURL             string
@@ -54,11 +56,16 @@ type Gateway struct {
 	memory      *slackmemory.Store
 	recoverMode RecoverMode
 	recovery    *RecoveryStore
+	catchUpMu   sync.Mutex
 }
 
 const (
 	slackSocketReconnectInitialDelay = time.Second
 	slackSocketReconnectMaxDelay     = 30 * time.Second
+	slackRecoveryPollInterval        = time.Minute
+	slackRecoveryThreadTTL           = 24 * time.Hour
+	slackThreadCatchUpLimit          = 15
+	slackThreadClosedReaction        = "white_check_mark"
 )
 
 // NewGateway returns a Slack gateway service.
@@ -138,6 +145,7 @@ func (g *Gateway) Serve(ctx context.Context) error {
 	if err := g.catchUp(ctx); err != nil {
 		g.logger.Printf("Slack recovery catch-up failed: %v", err)
 	}
+	g.startRecoveryPoller(ctx)
 
 	reconnectDelay := slackSocketReconnectInitialDelay
 	for {
@@ -298,6 +306,9 @@ func (g *Gateway) catchUp(ctx context.Context) error {
 	if g.recovery == nil || !g.recovery.Enabled() || g.recoverMode == RecoverModeOff {
 		return nil
 	}
+	g.catchUpMu.Lock()
+	defer g.catchUpMu.Unlock()
+
 	threads, err := g.recovery.Threads()
 	if err != nil {
 		return err
@@ -318,10 +329,41 @@ func (g *Gateway) catchUp(ctx context.Context) error {
 
 func (g *Gateway) catchUpThread(ctx context.Context, thread RecoveryThreadRecord) error {
 	key := thread.Key
+	if recoveryThreadExpired(thread, time.Now(), slackRecoveryThreadTTL) {
+		removed, err := g.recovery.RemoveThread(key)
+		if err != nil {
+			return err
+		}
+		if removed {
+			g.logger.Printf("thread %s last seen at %s older than %s, stop tracking", key.ThreadTS, thread.LastSeenAt, slackRecoveryThreadTTL)
+		}
+		return nil
+	}
+
+	closed, tickUser, tickedAt, err := g.threadClosedByReaction(ctx, key)
+	if err != nil {
+		g.logger.Printf(
+			"Slack recovery close reaction check failed for team=%s channel=%s thread=%s: %v",
+			key.TeamID,
+			key.ChannelID,
+			key.ThreadTS,
+			err,
+		)
+	} else if closed {
+		removed, err := g.recovery.RemoveThread(key)
+		if err != nil {
+			return err
+		}
+		if removed {
+			g.logger.Printf("thread %s, user %s ticked at %s, stop tracking", key.ThreadTS, tickUser, tickedAt)
+		}
+		return nil
+	}
+
 	messages, err := g.client.Thread(ctx, ThreadOptions{
 		Channel:  key.ChannelID,
 		ThreadTS: key.ThreadTS,
-		Limit:    100,
+		Limit:    slackThreadCatchUpLimit,
 		Oldest:   thread.LastProcessedTS,
 	})
 	if err != nil {
@@ -361,6 +403,66 @@ func (g *Gateway) catchUpThread(ctx context.Context, thread RecoveryThreadRecord
 		}
 	}
 	return nil
+}
+
+func (g *Gateway) threadClosedByReaction(ctx context.Context, key RecoveryThreadKey) (bool, string, string, error) {
+	if g.client == nil || strings.TrimSpace(key.ChannelID) == "" || strings.TrimSpace(key.ThreadTS) == "" {
+		return false, "", "", nil
+	}
+	reactions, err := g.client.GetReactions(ctx, ReactionGetOptions{
+		Channel:   key.ChannelID,
+		Timestamp: key.ThreadTS,
+		Full:      true,
+	})
+	if err != nil {
+		return false, "", "", err
+	}
+	for _, reaction := range reactions.Message.Reactions {
+		if strings.Trim(reaction.Name, ":") != slackThreadClosedReaction {
+			continue
+		}
+		user := ""
+		if len(reaction.Users) > 0 {
+			user = reaction.Users[0]
+		}
+		return true, user, time.Now().Format(time.RFC3339Nano), nil
+	}
+	return false, "", "", nil
+}
+
+func recoveryThreadExpired(thread RecoveryThreadRecord, now time.Time, ttl time.Duration) bool {
+	if ttl <= 0 || strings.TrimSpace(thread.LastSeenAt) == "" {
+		return false
+	}
+	lastSeenAt, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(thread.LastSeenAt))
+	if err != nil {
+		return false
+	}
+	return now.Sub(lastSeenAt) > ttl
+}
+
+func (g *Gateway) startRecoveryPoller(ctx context.Context) {
+	if g.recovery == nil || !g.recovery.Enabled() || g.recoverMode == RecoverModeOff {
+		return
+	}
+	interval := g.cfg.RecoveryPollInterval
+	if interval <= 0 {
+		interval = slackRecoveryPollInterval
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := g.catchUp(ctx); err != nil {
+					g.logger.Printf("Slack recovery poll failed: %v", err)
+				}
+			}
+		}
+	}()
 }
 
 func recoveryThreadKey(entry platform.MessageEvent) RecoveryThreadKey {

@@ -141,6 +141,26 @@ func (s *RecoveryStore) MarkProcessed(key RecoveryThreadKey, messageTS string) e
 	return s.saveLocked(state)
 }
 
+func (s *RecoveryStore) RemoveThread(key RecoveryThreadKey) (bool, error) {
+	if !s.Enabled() {
+		return false, nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state, err := s.loadLocked()
+	if err != nil {
+		return false, err
+	}
+	idx := findRecoveryThread(state.Threads, key)
+	if idx < 0 {
+		return false, nil
+	}
+	state.Threads = append(state.Threads[:idx], state.Threads[idx+1:]...)
+	return true, s.saveLocked(state)
+}
+
 func (s *RecoveryStore) Claim(key RecoveryThreadKey, messageTS string) (bool, error) {
 	if !s.Enabled() {
 		return true, nil

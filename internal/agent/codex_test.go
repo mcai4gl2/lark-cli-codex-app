@@ -258,6 +258,42 @@ func TestRunnerRunDoesNotObserveAck(t *testing.T) {
 	}
 }
 
+func TestRunnerRunSkipsBlankAck(t *testing.T) {
+	var events []string
+	messenger := &fakeMessenger{sequence: &events}
+	observer := &fakeProcessingObserver{events: &events}
+	runner := NewRunnerWithMessenger(Config{
+		Enabled:            true,
+		CodexBinary:        fakeCodexExecutable(t),
+		Workspace:          t.TempDir(),
+		AckText:            "   ",
+		ResultMaxChars:     100,
+		Timeout:            time.Second,
+		ProcessingObserver: observer,
+	}, nil, messenger)
+	entry := inbound.LoggedEvent{
+		Provider:    "slack",
+		ChannelID:   "C123",
+		ThreadID:    "1712345678.000100",
+		MessageID:   "1712345678.000100",
+		UserID:      "U123",
+		MessageText: "do the thing",
+	}
+
+	runner.run(entry)
+
+	want := []string{"started", "reply:codex final output", "finished"}
+	if strings.Join(events, "|") != strings.Join(want, "|") {
+		t.Fatalf("events = %#v, want %#v", events, want)
+	}
+	if len(messenger.texts) != 1 {
+		t.Fatalf("reply count = %d, texts = %#v", len(messenger.texts), messenger.texts)
+	}
+	if observer.started != 1 || observer.finished != 1 {
+		t.Fatalf("started=%d finished=%d", observer.started, observer.finished)
+	}
+}
+
 func TestRunnerProcessingObserver(t *testing.T) {
 	t.Run("starts before replies complete and finishes after execution", func(t *testing.T) {
 		var events []string

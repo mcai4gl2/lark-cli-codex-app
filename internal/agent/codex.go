@@ -58,9 +58,6 @@ func NewRunnerWithMessenger(cfg Config, logger *log.Logger, messenger platform.M
 	if cfg.CodexBinary == "" {
 		cfg.CodexBinary = "codex"
 	}
-	if cfg.AckText == "" {
-		cfg.AckText = "收到，开始处理。"
-	}
 	if cfg.ResultMaxChars <= 0 {
 		cfg.ResultMaxChars = 1800
 	}
@@ -109,8 +106,10 @@ func (r *Runner) run(entry inbound.LoggedEvent) {
 		}()
 	}
 
-	if err := r.reply(entry, r.cfg.AckText); err != nil {
-		r.logger.Printf("failed to send ack for message_id=%s: %v", entry.MessageID, err)
+	if strings.TrimSpace(r.cfg.AckText) != "" {
+		if err := r.reply(entry, r.cfg.AckText); err != nil {
+			r.logger.Printf("failed to send ack for message_id=%s: %v", entry.MessageID, err)
+		}
 	}
 
 	result, err := r.execute(entry)

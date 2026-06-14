@@ -123,7 +123,7 @@ func Init() error {
 	viper.SetDefault("slack.memory.max_section_chars", 2000)
 	viper.SetDefault("slack.agent.enabled", false)
 	viper.SetDefault("slack.agent.codex_binary", "codex")
-	viper.SetDefault("slack.agent.ack_text", "Received. Working on it.")
+	viper.SetDefault("slack.agent.ack_text", "")
 	viper.SetDefault("slack.agent.result_max_chars", 3500)
 	viper.SetDefault("slack.agent.timeout_minutes", 20)
 	viper.SetDefault("webhook.listen_addr", "0.0.0.0:8080")

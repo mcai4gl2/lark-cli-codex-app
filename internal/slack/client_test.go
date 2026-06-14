@@ -278,17 +278,15 @@ func TestClientRemoveReactionCallsReactionsRemove(t *testing.T) {
 }
 
 func TestClientGetReactionsCallsReactionsGet(t *testing.T) {
-	var got struct {
-		Channel   string `json:"channel"`
-		Timestamp string `json:"timestamp"`
-		Full      bool   `json:"full"`
-	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/reactions.get" {
 			t.Fatalf("path = %s", r.URL.Path)
 		}
-		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
-			t.Fatalf("decode body: %v", err)
+		if r.Method != http.MethodGet {
+			t.Fatalf("method = %s", r.Method)
+		}
+		if r.URL.Query().Get("channel") != "C123" || r.URL.Query().Get("timestamp") != "111.222" || r.URL.Query().Get("full") != "true" {
+			t.Fatalf("query = %s", r.URL.RawQuery)
 		}
 		_, _ = w.Write([]byte(`{"ok":true,"type":"message","channel":"C123","message":{"type":"message","user":"U123","text":"hello","ts":"111.222","reactions":[{"name":"eyes","users":["U456","U789"],"count":2}]}}`))
 	}))
@@ -304,9 +302,6 @@ func TestClientGetReactionsCallsReactionsGet(t *testing.T) {
 		t.Fatalf("GetReactions() error = %v", err)
 	}
 
-	if got.Channel != "C123" || got.Timestamp != "111.222" || !got.Full {
-		t.Fatalf("request = %+v", got)
-	}
 	if result.Channel != "C123" || result.Message.TS != "111.222" || len(result.Message.Reactions) != 1 {
 		t.Fatalf("result = %+v", result)
 	}

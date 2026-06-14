@@ -99,6 +99,9 @@ func TestSlackConfigDefaultsUseSlackStateDir(t *testing.T) {
 	if got := GetSlackAgentResultMaxChars(); got != 3500 {
 		t.Fatalf("GetSlackAgentResultMaxChars() = %d", got)
 	}
+	if got := GetSlackAgentAckText(); got != "" {
+		t.Fatalf("GetSlackAgentAckText() = %q", got)
+	}
 }
 
 func TestSlackMemoryMaxSectionCharsFallback(t *testing.T) {

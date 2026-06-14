@@ -268,12 +268,12 @@ func (c *Client) GetReactions(ctx context.Context, opts ReactionGetOptions) (Rea
 		return ReactionList{}, fmt.Errorf("slack timestamp is required")
 	}
 
-	payload := map[string]interface{}{
-		"channel":   channel,
-		"timestamp": timestamp,
+	params := url.Values{
+		"channel":   []string{channel},
+		"timestamp": []string{timestamp},
 	}
 	if opts.Full {
-		payload["full"] = true
+		params.Set("full", "true")
 	}
 
 	var response struct {
@@ -282,7 +282,7 @@ func (c *Client) GetReactions(ctx context.Context, opts ReactionGetOptions) (Rea
 		Channel string  `json:"channel"`
 		Message Message `json:"message"`
 	}
-	if err := c.call(ctx, "reactions.get", payload, &response); err != nil {
+	if err := c.callGet(ctx, "reactions.get", params, &response); err != nil {
 		return ReactionList{}, err
 	}
 	if !response.OK {

@@ -113,3 +113,40 @@ func TestRecoveryStoreComparesSlackTimestampsNumerically(t *testing.T) {
 		t.Fatal("ShouldProcess non-canonical older numeric timestamp = true")
 	}
 }
+
+func TestRecoveryStoreRemoveThread(t *testing.T) {
+	store := NewRecoveryStore(filepath.Join(t.TempDir(), "recover-state.json"))
+	keep := RecoveryThreadKey{TeamID: "T123", ChannelID: "C123", ThreadTS: "111.222"}
+	remove := RecoveryThreadKey{TeamID: "T123", ChannelID: "C123", ThreadTS: "333.444"}
+
+	if err := store.MarkProcessed(keep, "111.333"); err != nil {
+		t.Fatalf("MarkProcessed(keep) error = %v", err)
+	}
+	if err := store.MarkProcessed(remove, "333.555"); err != nil {
+		t.Fatalf("MarkProcessed(remove) error = %v", err)
+	}
+
+	removed, err := store.RemoveThread(remove)
+	if err != nil {
+		t.Fatalf("RemoveThread() error = %v", err)
+	}
+	if !removed {
+		t.Fatal("RemoveThread() removed = false")
+	}
+
+	removed, err = store.RemoveThread(remove)
+	if err != nil {
+		t.Fatalf("RemoveThread() second error = %v", err)
+	}
+	if removed {
+		t.Fatal("RemoveThread() second removed = true")
+	}
+
+	threads, err := store.Threads()
+	if err != nil {
+		t.Fatalf("Threads() error = %v", err)
+	}
+	if len(threads) != 1 || threads[0].Key != keep {
+		t.Fatalf("threads = %+v", threads)
+	}
+}
