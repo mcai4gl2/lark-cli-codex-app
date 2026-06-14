@@ -14,10 +14,11 @@ import (
 )
 
 type fakeMessenger struct {
-	event  platform.MessageEvent
-	text   string
-	events []platform.MessageEvent
-	texts  []string
+	event    platform.MessageEvent
+	text     string
+	events   []platform.MessageEvent
+	texts    []string
+	sequence *[]string
 }
 
 func (f *fakeMessenger) Reply(_ context.Context, event platform.MessageEvent, text string) error {
@@ -25,6 +26,9 @@ func (f *fakeMessenger) Reply(_ context.Context, event platform.MessageEvent, te
 	f.text = text
 	f.events = append(f.events, event)
 	f.texts = append(f.texts, text)
+	if f.sequence != nil {
+		*f.sequence = append(*f.sequence, "reply:"+text)
+	}
 	return nil
 }
 
@@ -59,6 +63,32 @@ func (f *fakeReplyObserver) ObserveReply(event platform.MessageEvent, text strin
 	f.text = text
 	f.events = append(f.events, event)
 	f.texts = append(f.texts, text)
+	return nil
+}
+
+type fakeProcessingObserver struct {
+	startedEvent  platform.MessageEvent
+	finishedEvent platform.MessageEvent
+	started       int
+	finished      int
+	events        *[]string
+}
+
+func (f *fakeProcessingObserver) ProcessingStarted(event platform.MessageEvent) error {
+	f.startedEvent = event
+	f.started++
+	if f.events != nil {
+		*f.events = append(*f.events, "started")
+	}
+	return nil
+}
+
+func (f *fakeProcessingObserver) ProcessingFinished(event platform.MessageEvent) error {
+	f.finishedEvent = event
+	f.finished++
+	if f.events != nil {
+		*f.events = append(*f.events, "finished")
+	}
 	return nil
 }
 
@@ -228,6 +258,78 @@ func TestRunnerRunDoesNotObserveAck(t *testing.T) {
 	}
 }
 
+func TestRunnerProcessingObserver(t *testing.T) {
+	t.Run("starts before replies complete and finishes after execution", func(t *testing.T) {
+		var events []string
+		messenger := &fakeMessenger{sequence: &events}
+		observer := &fakeProcessingObserver{events: &events}
+		runner := NewRunnerWithMessenger(Config{
+			Enabled:            true,
+			CodexBinary:        fakeCodexExecutable(t),
+			Workspace:          t.TempDir(),
+			AckText:            "working",
+			ResultMaxChars:     100,
+			Timeout:            time.Second,
+			ProcessingObserver: observer,
+		}, nil, messenger)
+		entry := inbound.LoggedEvent{
+			Provider:    "slack",
+			ChannelID:   "C123",
+			ThreadID:    "1712345678.000100",
+			MessageID:   "1712345678.000100",
+			UserID:      "U123",
+			MessageText: "do the thing",
+		}
+
+		runner.run(entry)
+
+		want := []string{"started", "reply:working", "reply:codex final output", "finished"}
+		if strings.Join(events, "|") != strings.Join(want, "|") {
+			t.Fatalf("events = %#v, want %#v", events, want)
+		}
+		if observer.started != 1 || observer.finished != 1 {
+			t.Fatalf("started=%d finished=%d", observer.started, observer.finished)
+		}
+		if observer.startedEvent.MessageID != entry.MessageID || observer.finishedEvent.MessageID != entry.MessageID {
+			t.Fatalf("observer events = started:%+v finished:%+v", observer.startedEvent, observer.finishedEvent)
+		}
+	})
+
+	t.Run("finishes when execute fails", func(t *testing.T) {
+		observer := &fakeProcessingObserver{}
+		messenger := &fakeMessenger{}
+		runner := NewRunnerWithMessenger(Config{
+			Enabled:            true,
+			CodexBinary:        failingCodexExecutable(t),
+			Workspace:          t.TempDir(),
+			AckText:            "working",
+			ResultMaxChars:     100,
+			Timeout:            time.Second,
+			ProcessingObserver: observer,
+		}, nil, messenger)
+		entry := inbound.LoggedEvent{
+			Provider:    "slack",
+			ChannelID:   "C123",
+			ThreadID:    "1712345678.000100",
+			MessageID:   "1712345678.000100",
+			UserID:      "U123",
+			MessageText: "do the thing",
+		}
+
+		runner.run(entry)
+
+		if observer.started != 1 || observer.finished != 1 {
+			t.Fatalf("started=%d finished=%d", observer.started, observer.finished)
+		}
+		if len(messenger.texts) != 2 {
+			t.Fatalf("reply count = %d, texts = %#v", len(messenger.texts), messenger.texts)
+		}
+		if !strings.Contains(messenger.texts[1], "simulated codex failure") {
+			t.Fatalf("failure reply = %q", messenger.texts[1])
+		}
+	})
+}
+
 func TestRunnerExecuteUsesContextProviderInPrompt(t *testing.T) {
 	capturePath := filepath.Join(t.TempDir(), "prompt.txt")
 	provider := &fakeContextProvider{context: "Memory says this thread chose SQLite."}
@@ -341,6 +443,19 @@ printf '%s' "codex final output" > "$output"
 `
 	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
 		t.Fatalf("WriteFile(fake codex): %v", err)
+	}
+	return path
+}
+
+func failingCodexExecutable(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "failing-codex")
+	script := `#!/bin/sh
+echo "simulated codex failure" >&2
+exit 7
+`
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatalf("WriteFile(failing codex): %v", err)
 	}
 	return path
 }

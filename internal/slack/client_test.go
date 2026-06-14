@@ -159,6 +159,42 @@ func TestClientThreadCallsConversationsReplies(t *testing.T) {
 	}
 }
 
+func TestClientThreadIncludesOldestAndLatest(t *testing.T) {
+	var got struct {
+		Channel string `json:"channel"`
+		TS      string `json:"ts"`
+		Limit   int    `json:"limit"`
+		Oldest  string `json:"oldest"`
+		Latest  string `json:"latest"`
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/conversations.replies" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		_, _ = w.Write([]byte(`{"ok":true,"messages":[{"type":"message","user":"U123","text":"root","ts":"111.222"}],"has_more":false}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{BotToken: "xoxb-test", BaseURL: server.URL})
+	_, err := client.Thread(context.Background(), ThreadOptions{
+		Channel:  "C123",
+		ThreadTS: "111.222",
+		Limit:    10,
+		Oldest:   "100.000",
+		Latest:   "200.000",
+	})
+	if err != nil {
+		t.Fatalf("Thread() error = %v", err)
+	}
+
+	if got.Channel != "C123" || got.TS != "111.222" || got.Limit != 10 || got.Oldest != "100.000" || got.Latest != "200.000" {
+		t.Fatalf("request = %+v", got)
+	}
+}
+
 func TestClientAddReactionCallsReactionsAdd(t *testing.T) {
 	var got struct {
 		Channel   string `json:"channel"`

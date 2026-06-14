@@ -18,6 +18,19 @@ func TestSlackGatewayServeCommandIsRegistered(t *testing.T) {
 	}
 }
 
+func TestSlackGatewayServeHasRecoverFlags(t *testing.T) {
+	cmd, _, err := rootCmd.Find([]string{"slack", "gateway", "serve"})
+	if err != nil {
+		t.Fatalf("Find(slack gateway serve) error = %v", err)
+	}
+	if cmd.Flags().Lookup("recover-mode") == nil {
+		t.Fatal("recover-mode flag is missing")
+	}
+	if cmd.Flags().Lookup("processing-reaction") == nil {
+		t.Fatal("processing-reaction flag is missing")
+	}
+}
+
 func TestSlackMessageCommandsAreRegistered(t *testing.T) {
 	for _, args := range [][]string{
 		{"slack", "msg", "send"},

@@ -88,7 +88,7 @@ Scopes for Slack message CLI commands:
 | `im:history` | `lark slack msg history` and `thread` for bot DMs. |
 | `mpim:history` | Optional, only if you use multi-person DMs. |
 | `reactions:read` | `lark slack msg react list`. |
-| `reactions:write` | `lark slack msg react` and `react remove`. |
+| `reactions:write` | `lark slack msg react`, `react remove`, and the gateway processing reaction when enabled. |
 
 Optional read/list scopes if you later add richer Slack commands:
 
@@ -102,6 +102,11 @@ Optional read/list scopes if you later add richer Slack commands:
 After changing scopes, click **Install to Workspace** or **Reinstall to
 Workspace**. Copy the `xoxb-...` **Bot User OAuth Token**. This is
 `SLACK_BOT_TOKEN`.
+
+Recover mode uses Slack's `conversations.replies` API for known participating
+threads. If you use recover mode outside DMs, the app also needs the matching
+history scope for those conversations, such as `channels:history` for public
+channels or `groups:history` for private channels where the bot is installed.
 
 ## 5. Subscribe To Events
 
@@ -394,7 +399,7 @@ name the target repo explicitly.
 
 Create small local scripts so each mode is repeatable.
 
-`~/bin/codex-chat-gateway`:
+`~/bin/codex-chat-gateway.sh`:
 
 ```bash
 #!/usr/bin/env bash
@@ -405,14 +410,64 @@ export SLACK_APP_TOKEN="xapp-generic-chat"
 export SLACK_BOT_TOKEN="xoxb-generic-chat"
 export SLACK_GATEWAY_EVENT_LOG="$HOME/CodexChat/.slack/gateway-events.jsonl"
 
-mkdir -p "$(dirname "$SLACK_GATEWAY_EVENT_LOG")"
+GATEWAY_LOG="${GATEWAY_LOG:-$HOME/CodexChat/.slack/gateway.log}"
+GATEWAY_PID_FILE="${GATEWAY_PID_FILE:-$HOME/CodexChat/.slack/gateway.pid}"
+
+mkdir -p "$(dirname "$SLACK_GATEWAY_EVENT_LOG")" "$(dirname "$GATEWAY_LOG")" "$(dirname "$GATEWAY_PID_FILE")"
 
 LARK_BIN="${LARK_BIN:-$HOME/.local/bin/lark}"
-exec "$LARK_BIN" slack gateway serve \
+if [[ -f "$GATEWAY_PID_FILE" ]]; then
+  existing_pid="$(cat "$GATEWAY_PID_FILE")"
+  if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" 2>/dev/null; then
+    echo "lark slack gateway is already running: pid=$existing_pid"
+    echo "log: $GATEWAY_LOG"
+    exit 0
+  fi
+  rm -f "$GATEWAY_PID_FILE"
+fi
+
+gateway_cmd=(
+  "$LARK_BIN" slack gateway serve
   --agent \
   --memory \
   --memory-root "$HOME/CodexChat/.slack/conversations" \
   --agent-workspace "$HOME/CodexChat"
+)
+
+nohup setsid -f bash -c '
+  pid_file="$1"
+  log_file="$2"
+  shift 2
+
+  (
+    echo "starting lark slack gateway at $(date -Is)"
+    "$@" &
+    child_pid=$!
+    printf "%s\n" "$child_pid" > "$pid_file"
+    wait "$child_pid"
+    status=$?
+    echo "lark slack gateway exited at $(date -Is) status=$status"
+    exit "$status"
+  ) 2>&1 | tee -a "$log_file" >/dev/null
+' bash "$GATEWAY_PID_FILE" "$GATEWAY_LOG" "${gateway_cmd[@]}" >/dev/null 2>&1 &
+
+for _ in {1..50}; do
+  if [[ -s "$GATEWAY_PID_FILE" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+
+gateway_pid="$(cat "$GATEWAY_PID_FILE")"
+if ! kill -0 "$gateway_pid" 2>/dev/null; then
+  echo "failed to start lark slack gateway; recent log:"
+  tail -n 40 "$GATEWAY_LOG" || true
+  exit 1
+fi
+
+echo "started lark slack gateway: pid=$gateway_pid"
+echo "log: $GATEWAY_LOG"
+echo "follow: tail -f '$GATEWAY_LOG'"
 ```
 
 `~/bin/codex-project-lark-cli-gateway`:
@@ -438,6 +493,25 @@ exec "$LARK_BIN" slack gateway serve \
 
 Then run each script in a separate terminal, tmux pane, launchd job, or systemd
 user service.
+
+The background chat launcher above detaches the gateway with `nohup` and
+`setsid`, stores the real `lark` process ID in
+`$HOME/CodexChat/.slack/gateway.pid`, and appends stdout/stderr to
+`$HOME/CodexChat/.slack/gateway.log`.
+
+Useful operations:
+
+```bash
+~/bin/codex-chat-gateway.sh
+tail -f "$HOME/CodexChat/.slack/gateway.log"
+tail -f "$HOME/CodexChat/.slack/gateway-events.jsonl"
+kill "$(cat "$HOME/CodexChat/.slack/gateway.pid")"
+```
+
+The plain `gateway.log` file is process-oriented: startup JSON, gateway errors,
+agent dispatch errors, and exit status. The `gateway-events.jsonl` file is the
+structured Slack event audit log. Treat both as private because Slack payloads
+may include channel text, user IDs, and message metadata.
 
 ### Slack Memory Files
 
@@ -481,6 +555,64 @@ Useful commands:
 ./lark slack memory append --channel D123 --thread-ts 1710000000.000100 --scope summary --text "- Thread discussed Slack memory setup."
 ```
 
+### Slack Recover Mode
+
+Slack recover mode lets a long-running gateway catch up missed messages in
+threads it already knows about. The recovery state file lives under the Slack
+memory root:
+
+```text
+.slack/conversations/.state/recover-state.json
+```
+
+The default is thread mode:
+
+```bash
+./lark slack gateway serve --recover-mode thread
+```
+
+The equivalent config setting is:
+
+```yaml
+slack:
+  gateway:
+    recover_mode: "thread"
+```
+
+In `thread` mode, the gateway remembers Slack threads where it is participating
+and, on startup or Socket Mode reconnect, calls `conversations.replies` to catch
+up missed messages. New user messages in those known participating threads are
+processed even when they do not mention the bot.
+
+Outside known participating threads, channel messages still need a bot mention.
+The gateway does not scan whole channels, and a mention is only required to
+start participation in a channel thread. DMs can start tasks without a mention.
+
+Other recover modes:
+
+| Mode | Behavior |
+| --- | --- |
+| `mention-dm` | Catch up only messages that would normally trigger the bot, such as app mentions and DMs. |
+| `off` | Disable recover mode. |
+
+The gateway adds an `eyes` reaction by default while it is processing a Slack
+message:
+
+```bash
+./lark slack gateway serve --processing-reaction eyes
+```
+
+The equivalent config setting is:
+
+```yaml
+slack:
+  gateway:
+    processing_reaction: "eyes"
+```
+
+Set `--processing-reaction ""` or `slack.gateway.processing_reaction: ""` to
+disable processing reactions.
+
 ## 10. Recommended Way To Run
 
 For normal use, run the Slack gateway as a long-lived local process:
@@ -523,6 +655,8 @@ Common flags:
 | `--memory-root PATH` | Root folder for channel/thread memory and audit files. |
 | `--memory-max-section-chars N` | Per-section character limit for loaded memory Markdown. |
 | `--event-log PATH` | JSONL event log path. |
+| `--recover-mode MODE` | Slack catch-up mode: `thread`, `mention-dm`, or `off`. Defaults to `thread`. |
+| `--processing-reaction NAME` | Emoji reaction used while processing Slack messages. Defaults to `eyes`; empty disables reactions. |
 | `--auto-reply-text TEXT` | Static reply template when not using the agent. |
 | `--desktop-worker` | Run the local desktop task worker in the gateway process. |
 

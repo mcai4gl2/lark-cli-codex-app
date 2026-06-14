@@ -44,6 +44,10 @@ slack:
   gateway:
     # JSONL file that stores received Slack message events
     event_log: ".slack/gateway-events.jsonl"
+    # Slack catch-up mode: thread, mention-dm, or off
+    recover_mode: "thread"
+    # Emoji reaction used while processing Slack messages; empty disables reactions
+    processing_reaction: "eyes"
     # Optional plain-text auto-reply template
     # Supported placeholders: {{text}}, {{channel_id}}, {{thread_id}}, {{message_id}}, {{user_id}}
     auto_reply_text: ""

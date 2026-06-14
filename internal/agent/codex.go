@@ -23,16 +23,22 @@ type ReplyObserver interface {
 	ObserveReply(event platform.MessageEvent, text string) error
 }
 
+type ProcessingObserver interface {
+	ProcessingStarted(event platform.MessageEvent) error
+	ProcessingFinished(event platform.MessageEvent) error
+}
+
 type Config struct {
-	Enabled         bool
-	CodexBinary     string
-	Workspace       string
-	Model           string
-	AckText         string
-	ResultMaxChars  int
-	Timeout         time.Duration
-	ContextProvider PromptContextProvider
-	ReplyObserver   ReplyObserver
+	Enabled            bool
+	CodexBinary        string
+	Workspace          string
+	Model              string
+	AckText            string
+	ResultMaxChars     int
+	Timeout            time.Duration
+	ContextProvider    PromptContextProvider
+	ReplyObserver      ReplyObserver
+	ProcessingObserver ProcessingObserver
 }
 
 type Runner struct {
@@ -92,6 +98,17 @@ func (r *Runner) Dispatch(entry inbound.LoggedEvent) {
 }
 
 func (r *Runner) run(entry inbound.LoggedEvent) {
+	if r.cfg.ProcessingObserver != nil {
+		if err := r.cfg.ProcessingObserver.ProcessingStarted(entry); err != nil {
+			r.logger.Printf("processing observer start failed for message_id=%s: %v", entry.MessageID, err)
+		}
+		defer func() {
+			if err := r.cfg.ProcessingObserver.ProcessingFinished(entry); err != nil {
+				r.logger.Printf("processing observer finish failed for message_id=%s: %v", entry.MessageID, err)
+			}
+		}()
+	}
+
 	if err := r.reply(entry, r.cfg.AckText); err != nil {
 		r.logger.Printf("failed to send ack for message_id=%s: %v", entry.MessageID, err)
 	}

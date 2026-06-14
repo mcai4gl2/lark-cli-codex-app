@@ -18,6 +18,8 @@ func TestSlackConfigDefaultsAndEnvBindings(t *testing.T) {
 	t.Setenv("SLACK_AGENT_WORKSPACE", "slack-work")
 	t.Setenv("SLACK_AGENT_RESULT_MAX_CHARS", "3333")
 	t.Setenv("SLACK_GATEWAY_EVENT_LOG", "custom/slack-events.jsonl")
+	t.Setenv("SLACK_GATEWAY_RECOVER_MODE", "mention-dm")
+	t.Setenv("SLACK_GATEWAY_PROCESSING_REACTION", ":hourglass_flowing_sand:")
 	t.Setenv("SLACK_MEMORY_ENABLED", "true")
 	t.Setenv("SLACK_MEMORY_ROOT", "custom/slack-memory")
 	t.Setenv("SLACK_MEMORY_MAX_SECTION_CHARS", "1234")
@@ -47,6 +49,12 @@ func TestSlackConfigDefaultsAndEnvBindings(t *testing.T) {
 	if got := GetSlackGatewayEventLogPath(); got != filepath.Join(tmp, "custom/slack-events.jsonl") {
 		t.Fatalf("GetSlackGatewayEventLogPath() = %q", got)
 	}
+	if got := GetSlackGatewayRecoverMode(); got != "mention-dm" {
+		t.Fatalf("GetSlackGatewayRecoverMode() = %q", got)
+	}
+	if got := GetSlackGatewayProcessingReaction(); got != "hourglass_flowing_sand" {
+		t.Fatalf("GetSlackGatewayProcessingReaction() = %q", got)
+	}
 	if !GetSlackMemoryEnabled() {
 		t.Fatalf("GetSlackMemoryEnabled() = false")
 	}
@@ -69,6 +77,12 @@ func TestSlackConfigDefaultsUseSlackStateDir(t *testing.T) {
 
 	if got := GetSlackGatewayEventLogPath(); got != filepath.Join(tmp, ".slack", "gateway-events.jsonl") {
 		t.Fatalf("GetSlackGatewayEventLogPath() = %q", got)
+	}
+	if got := GetSlackGatewayRecoverMode(); got != "thread" {
+		t.Fatalf("GetSlackGatewayRecoverMode() = %q", got)
+	}
+	if got := GetSlackGatewayProcessingReaction(); got != "eyes" {
+		t.Fatalf("GetSlackGatewayProcessingReaction() = %q", got)
 	}
 	if got := GetSlackDesktopTaskRoot(); got != filepath.Join(tmp, ".slack", "desktop-tasks") {
 		t.Fatalf("GetSlackDesktopTaskRoot() = %q", got)

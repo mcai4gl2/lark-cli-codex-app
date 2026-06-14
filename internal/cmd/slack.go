@@ -40,14 +40,16 @@ var slackMemoryCmd = &cobra.Command{
 }
 
 var (
-	slackGatewayEventLogPath   string
-	slackGatewayAutoReplyText  string
-	slackGatewayAgentEnabled   bool
-	slackGatewayAgentWorkspace string
-	slackGatewayDesktopWorker  bool
-	slackGatewayMemoryEnabled  bool
-	slackGatewayMemoryRoot     string
-	slackGatewayMemoryMaxChars int
+	slackGatewayEventLogPath       string
+	slackGatewayAutoReplyText      string
+	slackGatewayAgentEnabled       bool
+	slackGatewayAgentWorkspace     string
+	slackGatewayDesktopWorker      bool
+	slackGatewayMemoryEnabled      bool
+	slackGatewayMemoryRoot         string
+	slackGatewayMemoryMaxChars     int
+	slackGatewayRecoverMode        string
+	slackGatewayProcessingReaction string
 )
 
 var (
@@ -118,17 +120,19 @@ Examples:
 		}
 
 		cfg := slackgateway.Config{
-			AppToken:              config.GetSlackAppToken(),
-			BotToken:              config.GetSlackBotToken(),
-			BotUserID:             config.GetSlackBotUserID(),
-			EventLogPath:          slackGatewayEventLogPath,
-			AutoReplyText:         slackGatewayAutoReplyText,
-			Agent:                 agentCfg,
-			DesktopWorker:         slackGatewayDesktopWorker,
-			DesktopQueueRoot:      config.GetSlackDesktopTaskRoot(),
-			MemoryEnabled:         config.GetSlackMemoryEnabled(),
-			MemoryRoot:            config.GetSlackMemoryRoot(),
-			MemoryMaxSectionChars: config.GetSlackMemoryMaxSectionChars(),
+			AppToken:               config.GetSlackAppToken(),
+			BotToken:               config.GetSlackBotToken(),
+			BotUserID:              config.GetSlackBotUserID(),
+			EventLogPath:           slackGatewayEventLogPath,
+			AutoReplyText:          slackGatewayAutoReplyText,
+			Agent:                  agentCfg,
+			DesktopWorker:          slackGatewayDesktopWorker,
+			DesktopQueueRoot:       config.GetSlackDesktopTaskRoot(),
+			MemoryEnabled:          config.GetSlackMemoryEnabled(),
+			MemoryRoot:             config.GetSlackMemoryRoot(),
+			MemoryMaxSectionChars:  config.GetSlackMemoryMaxSectionChars(),
+			RecoverMode:            slackgateway.NormalizeRecoverMode(config.GetSlackGatewayRecoverMode()),
+			ProcessingReactionName: config.GetSlackGatewayProcessingReaction(),
 		}
 		if cfg.EventLogPath == "" {
 			cfg.EventLogPath = config.GetSlackGatewayEventLogPath()
@@ -145,6 +149,12 @@ Examples:
 		if cmd.Flags().Changed("memory-max-section-chars") {
 			cfg.MemoryMaxSectionChars = slackGatewayMemoryMaxChars
 		}
+		if cmd.Flags().Changed("recover-mode") {
+			cfg.RecoverMode = slackgateway.NormalizeRecoverMode(slackGatewayRecoverMode)
+		}
+		if cmd.Flags().Changed("processing-reaction") {
+			cfg.ProcessingReactionName = strings.Trim(strings.TrimSpace(slackGatewayProcessingReaction), ":")
+		}
 
 		service := slackgateway.NewGateway(cfg)
 		output.JSON(map[string]interface{}{
@@ -158,6 +168,8 @@ Examples:
 			"memory_enabled":        cfg.MemoryEnabled,
 			"memory_root":           cfg.MemoryRoot,
 			"memory_max_chars":      cfg.MemoryMaxSectionChars,
+			"recover_mode":          cfg.RecoverMode,
+			"processing_reaction":   cfg.ProcessingReactionName,
 			"public_https_required": false,
 		})
 
@@ -479,6 +491,8 @@ func init() {
 	slackGatewayServeCmd.Flags().BoolVar(&slackGatewayMemoryEnabled, "memory", false, "persist Slack channel and thread memory/audit files")
 	slackGatewayServeCmd.Flags().StringVar(&slackGatewayMemoryRoot, "memory-root", "", "root directory for Slack memory/audit files")
 	slackGatewayServeCmd.Flags().IntVar(&slackGatewayMemoryMaxChars, "memory-max-section-chars", 2000, "maximum characters per memory section injected into Codex prompts")
+	slackGatewayServeCmd.Flags().StringVar(&slackGatewayRecoverMode, "recover-mode", "", "Slack catch-up mode: thread, mention-dm, or off")
+	slackGatewayServeCmd.Flags().StringVar(&slackGatewayProcessingReaction, "processing-reaction", "", "emoji reaction used while processing Slack messages; empty disables reactions")
 
 	for _, c := range []*cobra.Command{slackMemoryPathCmd, slackMemoryShowCmd, slackMemoryAppendCmd} {
 		c.Flags().StringVar(&slackMemoryTeamID, "team", "", "Slack team ID")

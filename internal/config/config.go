@@ -39,8 +39,10 @@ type Config struct {
 		SigningSecret string `mapstructure:"signing_secret"`
 		BotUserID     string `mapstructure:"bot_user_id"`
 		Gateway       struct {
-			EventLog      string `mapstructure:"event_log"`
-			AutoReplyText string `mapstructure:"auto_reply_text"`
+			EventLog           string `mapstructure:"event_log"`
+			AutoReplyText      string `mapstructure:"auto_reply_text"`
+			RecoverMode        string `mapstructure:"recover_mode"`
+			ProcessingReaction string `mapstructure:"processing_reaction"`
 		} `mapstructure:"gateway"`
 		Memory struct {
 			Enabled         bool   `mapstructure:"enabled"`
@@ -114,6 +116,8 @@ func Init() error {
 	viper.SetDefault("agent.timeout_minutes", 20)
 	viper.SetDefault("gateway.event_log", filepath.Join(cfgDir, "gateway-events.jsonl"))
 	viper.SetDefault("slack.gateway.event_log", filepath.Join(rootDir, ".slack", "gateway-events.jsonl"))
+	viper.SetDefault("slack.gateway.recover_mode", "thread")
+	viper.SetDefault("slack.gateway.processing_reaction", "eyes")
 	viper.SetDefault("slack.memory.enabled", false)
 	viper.SetDefault("slack.memory.root", filepath.Join(rootDir, ".slack", "conversations"))
 	viper.SetDefault("slack.memory.max_section_chars", 2000)
@@ -151,6 +155,8 @@ func Init() error {
 	viper.BindEnv("slack.agent.timeout_minutes", "SLACK_AGENT_TIMEOUT_MINUTES")
 	viper.BindEnv("slack.gateway.event_log", "SLACK_GATEWAY_EVENT_LOG")
 	viper.BindEnv("slack.gateway.auto_reply_text", "SLACK_GATEWAY_AUTO_REPLY_TEXT")
+	viper.BindEnv("slack.gateway.recover_mode", "SLACK_GATEWAY_RECOVER_MODE")
+	viper.BindEnv("slack.gateway.processing_reaction", "SLACK_GATEWAY_PROCESSING_REACTION")
 	viper.BindEnv("slack.memory.enabled", "SLACK_MEMORY_ENABLED")
 	viper.BindEnv("slack.memory.root", "SLACK_MEMORY_ROOT")
 	viper.BindEnv("slack.memory.max_section_chars", "SLACK_MEMORY_MAX_SECTION_CHARS")
@@ -322,6 +328,16 @@ func GetSlackGatewayEventLogPath() string {
 // GetSlackGatewayAutoReplyText returns the optional Slack gateway auto-reply text.
 func GetSlackGatewayAutoReplyText() string {
 	return viper.GetString("slack.gateway.auto_reply_text")
+}
+
+// GetSlackGatewayRecoverMode returns the Slack catch-up mode.
+func GetSlackGatewayRecoverMode() string {
+	return strings.TrimSpace(viper.GetString("slack.gateway.recover_mode"))
+}
+
+// GetSlackGatewayProcessingReaction returns the Slack processing reaction name.
+func GetSlackGatewayProcessingReaction() string {
+	return strings.Trim(strings.TrimSpace(viper.GetString("slack.gateway.processing_reaction")), ":")
 }
 
 // GetSlackDesktopTaskRoot returns the Slack-specific desktop queue root.
