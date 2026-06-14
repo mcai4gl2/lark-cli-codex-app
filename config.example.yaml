@@ -17,11 +17,19 @@ defaults:
 oauth:
   redirect_port: 9999
 
-# Optional local task agent powered by `codex exec`
+# Optional local task agent powered by a local coding backend.
 agent:
   enabled: false
+  # Agent backend: codex or agy. Defaults to codex.
+  backend: "codex"
+  # Backend binary path or command name. Empty uses backend default.
+  binary: ""
+  # Extra backend-specific CLI args appended to the generated command.
+  args: []
+  # Deprecated compatibility alias for older Codex-only configs. Prefer binary.
   codex_binary: "codex"
   workspace: "~/WorkSpace"
+  model: ""
   ack_text: "收到，开始处理。"
   result_max_chars: 1800
   timeout_minutes: 20
@@ -55,16 +63,23 @@ slack:
     enabled: false
     # Root directory for channel/thread audit logs and memory markdown files.
     root: ".slack/conversations"
-    # Maximum characters loaded from each memory file into Codex prompts.
+    # Maximum characters loaded from each memory file into agent prompts.
     max_section_chars: 2000
-    # Include recent thread conversation records in Codex prompts.
+    # Include recent thread conversation records in agent prompts.
     include_thread_transcript: true
     # Maximum characters loaded from recent thread transcript records.
     max_transcript_chars: 8000
-    # Maximum recent thread records loaded into Codex prompts.
+    # Maximum recent thread records loaded into agent prompts.
     max_transcript_records: 30
   agent:
     enabled: false
+    # Agent backend: codex or agy. Defaults to codex.
+    backend: "codex"
+    # Backend binary path or command name. Empty uses backend default.
+    binary: ""
+    # Extra backend-specific CLI args appended to the generated command.
+    args: []
+    # Deprecated compatibility alias for older Codex-only configs. Prefer binary.
     codex_binary: "codex"
     workspace: "~/WorkSpace"
     model: ""

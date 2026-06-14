@@ -244,7 +244,7 @@ Keep the current safety semantics:
 - Modify: `internal/agent/codex.go`
 - Modify: `internal/agent/codex_test.go`
 
-- [ ] **Step 1: Write failing backend normalization tests**
+- [x] **Step 1: Write failing backend normalization tests**
 
 Add tests in `internal/agent/codex_test.go`:
 
@@ -291,7 +291,7 @@ func (b testBackend) Execute(context.Context, BackendRequest) (string, error) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 docker run --rm -v "$PWD:/work" -w /work golang:1.24 go test ./internal/agent -run 'TestNormalizeBackendName|TestResolveBackendBinary' -count=1
@@ -299,7 +299,7 @@ docker run --rm -v "$PWD:/work" -w /work golang:1.24 go test ./internal/agent -r
 
 Expected: FAIL because backend selection helpers do not exist.
 
-- [ ] **Step 3: Implement backend primitives**
+- [x] **Step 3: Implement backend primitives**
 
 Create `internal/agent/backend.go`:
 
@@ -384,7 +384,7 @@ type Config struct {
 
 Keep `NewRunnerWithMessenger` behavior unchanged in this task; it will call concrete backends after Task 2 creates `CodexBackend`.
 
-- [ ] **Step 4: Format and verify**
+- [x] **Step 4: Format and verify**
 
 ```bash
 docker run --rm -v "$PWD:/work" -w /work golang:1.24 gofmt -w internal/agent/backend.go internal/agent/codex.go internal/agent/codex_test.go
@@ -400,7 +400,7 @@ Expected: PASS.
 - Modify: `internal/agent/codex.go`
 - Modify: `internal/agent/codex_test.go`
 
-- [ ] **Step 1: Write a focused Codex adapter test**
+- [x] **Step 1: Write a focused Codex adapter test**
 
 Add a test that executes `CodexBackend` directly with `fakeCodexExecutable(t)` and asserts it writes/reads the output file:
 
@@ -430,7 +430,7 @@ func TestCodexBackendExecuteReturnsLastMessageOutput(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify current behavior is not adapterized**
+- [x] **Step 2: Run test to verify current behavior is not adapterized**
 
 ```bash
 docker run --rm -v "$PWD:/work" -w /work golang:1.24 go test ./internal/agent -run TestCodexBackendExecuteReturnsLastMessageOutput -count=1
@@ -438,7 +438,7 @@ docker run --rm -v "$PWD:/work" -w /work golang:1.24 go test ./internal/agent -r
 
 Expected: FAIL until `CodexBackend` exists.
 
-- [ ] **Step 3: Implement `CodexBackend` and update `Runner.execute()`**
+- [x] **Step 3: Implement `CodexBackend` and update `Runner.execute()`**
 
 Add this type in `internal/agent/codex.go` or a new `backend_codex.go`:
 
@@ -478,7 +478,7 @@ result, err := backend.Execute(ctx, BackendRequest{
 
 Keep timeout handling in `Runner.execute()` so all backends return the same timeout error wording.
 
-- [ ] **Step 4: Run existing agent tests**
+- [x] **Step 4: Run existing agent tests**
 
 ```bash
 docker run --rm -v "$PWD:/work" -w /work golang:1.24 gofmt -w internal/agent/codex.go internal/agent/codex_test.go
@@ -494,7 +494,7 @@ Expected: PASS.
 - Create: `internal/agent/backend_agy.go`
 - Create: `internal/agent/backend_agy_test.go`
 
-- [ ] **Step 1: Validate local `agy` command contract**
+- [x] **Step 1: Validate local `agy` command contract**
 
 Run on the implementation machine:
 
@@ -506,7 +506,9 @@ agy "$PWD" --prompt "Reply with exactly: agy-ok"
 
 Expected: help/version succeed and the prompt command prints a final response containing `agy-ok`. If the installed CLI uses a different documented prompt flag, capture that exact syntax and use it in the next test and implementation.
 
-- [ ] **Step 2: Write fake `agy` command tests**
+Result on 2026-06-14: `agy --help` and `agy --version` succeeded for `agy` 1.0.8. The positional workspace form opened a TTY path, so the implemented non-interactive contract is `agy --add-dir "$PWD" --prompt "Reply with exactly: agy-ok"`.
+
+- [x] **Step 2: Write fake `agy` command tests**
 
 Create `internal/agent/backend_agy_test.go`:
 
@@ -597,7 +599,7 @@ func TestResolveBackendSelectsAgy(t *testing.T) {
 
 Use the repository's existing fake executable style if the helper above is adjusted during implementation. Keep the assertion intent the same.
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 ```bash
 docker run --rm -v "$PWD:/work" -w /work golang:1.24 go test ./internal/agent -run 'TestAgyBackend' -count=1
@@ -605,7 +607,7 @@ docker run --rm -v "$PWD:/work" -w /work golang:1.24 go test ./internal/agent -r
 
 Expected: FAIL because `AgyBackend` does not exist.
 
-- [ ] **Step 4: Implement `AgyBackend`**
+- [x] **Step 4: Implement `AgyBackend`**
 
 Create `internal/agent/backend_agy.go`:
 
@@ -663,7 +665,7 @@ func resolveBackend(cfg Config) Backend {
 
 If Step 1 proved a different syntax, adjust only `args := ...` and the argv test to match the installed `agy` help text.
 
-- [ ] **Step 5: Format and verify**
+- [x] **Step 5: Format and verify**
 
 ```bash
 docker run --rm -v "$PWD:/work" -w /work golang:1.24 gofmt -w internal/agent/backend_agy.go internal/agent/backend_agy_test.go
@@ -679,7 +681,7 @@ Expected: PASS.
 - Modify: `internal/config/config.go`
 - Modify: `internal/config/slack_config_test.go`
 
-- [ ] **Step 1: Add config tests**
+- [x] **Step 1: Add config tests**
 
 Add tests that initialize config from temp YAML/env and assert:
 
@@ -690,7 +692,7 @@ Add tests that initialize config from temp YAML/env and assert:
 - `SLACK_AGENT_BACKEND=agy` overrides file config.
 - Existing `SLACK_AGENT_CODEX_BINARY` still returns through `GetSlackAgentCodexBinary()`.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 docker run --rm -v "$PWD:/work" -w /work golang:1.24 go test ./internal/config -run 'AgentBackend|SlackAgentBackend' -count=1
@@ -698,7 +700,7 @@ docker run --rm -v "$PWD:/work" -w /work golang:1.24 go test ./internal/config -
 
 Expected: FAIL until getters and bindings exist.
 
-- [ ] **Step 3: Add struct fields, defaults, env bindings, and getters**
+- [x] **Step 3: Add struct fields, defaults, env bindings, and getters**
 
 Extend both `Agent` structs with:
 
@@ -758,7 +760,7 @@ func cleanStringSlice(values []string, raw string) []string {
 }
 ```
 
-- [ ] **Step 4: Format and verify**
+- [x] **Step 4: Format and verify**
 
 ```bash
 docker run --rm -v "$PWD:/work" -w /work golang:1.24 gofmt -w internal/config/config.go internal/config/slack_config_test.go
@@ -779,11 +781,11 @@ Expected: PASS.
 - Modify: `internal/gateway/service_test.go`
 - Modify: `internal/slack/gateway_test.go`
 
-- [ ] **Step 1: Add gateway config tests**
+- [x] **Step 1: Add gateway config tests**
 
 Add assertions that default config builders populate `agent.Config.Backend`, `Binary`, and `Args` from config getters and direct Slack constructor arguments.
 
-- [ ] **Step 2: Run focused gateway/cmd tests to verify failure**
+- [x] **Step 2: Run focused gateway/cmd tests to verify failure**
 
 ```bash
 docker run --rm -v "$PWD:/work" -w /work golang:1.24 go test ./internal/gateway ./internal/slack ./internal/cmd -run 'Agent|Gateway|Slack' -count=1
@@ -791,7 +793,7 @@ docker run --rm -v "$PWD:/work" -w /work golang:1.24 go test ./internal/gateway 
 
 Expected: FAIL until fields and flags are wired.
 
-- [ ] **Step 3: Update config builders**
+- [x] **Step 3: Update config builders**
 
 In `internal/gateway/service.go`, add:
 
@@ -820,7 +822,7 @@ type DefaultAgentConfigInput struct {
 
 Return `agent.Config` with the neutral fields populated.
 
-- [ ] **Step 4: Add CLI flags**
+- [x] **Step 4: Add CLI flags**
 
 For Lark gateway:
 
@@ -838,7 +840,7 @@ slackGatewayServeCmd.Flags().StringVar(&slackGatewayAgentBinary, "agent-binary",
 
 When flags are changed, override the config-derived fields.
 
-- [ ] **Step 5: Update startup JSON**
+- [x] **Step 5: Update startup JSON**
 
 Include:
 
@@ -849,7 +851,7 @@ Include:
 
 Binary paths are not secrets, but keep the value exactly as configured for diagnosability.
 
-- [ ] **Step 6: Format and verify focused packages**
+- [x] **Step 6: Format and verify focused packages**
 
 ```bash
 docker run --rm -v "$PWD:/work" -w /work golang:1.24 gofmt -w internal/gateway/service.go internal/slack/gateway.go internal/cmd/gateway.go internal/cmd/slack.go internal/cmd/slack_test.go internal/gateway/service_test.go internal/slack/gateway_test.go
@@ -867,7 +869,7 @@ Expected: PASS.
 - Modify: `USER_GUIDE.md`
 - Modify: `USAGE.md`
 
-- [ ] **Step 1: Update `config.example.yaml`**
+- [x] **Step 1: Update `config.example.yaml`**
 
 Document `backend`, `binary`, `args`, and compatibility:
 
@@ -886,7 +888,7 @@ agent:
 
 Mirror the same fields under `slack.agent`.
 
-- [ ] **Step 2: Update user docs**
+- [x] **Step 2: Update user docs**
 
 Add examples:
 
@@ -917,7 +919,7 @@ agy "$PWD" --prompt "Reply with exactly: agy-ok"
 
 State that `codex_binary` remains supported for old Codex-only configs but new configs should use `backend` and `binary`.
 
-- [ ] **Step 3: Run docs grep**
+- [x] **Step 3: Run docs grep**
 
 ```bash
 rg -n "codex exec|Codex agent|codex_binary|agent-backend|agy" README.md USER_GUIDE.md USAGE.md config.example.yaml
@@ -931,13 +933,13 @@ Expected: remaining Codex-only wording is either intentionally about the Codex b
 
 - All touched Go/docs/config files.
 
-- [ ] **Step 1: Format all edited Go files**
+- [x] **Step 1: Format all edited Go files**
 
 ```bash
 docker run --rm -v "$PWD:/work" -w /work golang:1.24 gofmt -w internal/agent/*.go internal/config/config.go internal/gateway/service.go internal/slack/gateway.go internal/cmd/gateway.go internal/cmd/slack.go
 ```
 
-- [ ] **Step 2: Run focused tests**
+- [x] **Step 2: Run focused tests**
 
 ```bash
 docker run --rm -v "$PWD:/work" -w /work golang:1.24 go test ./internal/inbound ./internal/agent ./internal/desktop ./internal/gateway ./internal/webhook ./internal/slack ./internal/config ./internal/cmd
@@ -945,7 +947,7 @@ docker run --rm -v "$PWD:/work" -w /work golang:1.24 go test ./internal/inbound 
 
 Expected: PASS.
 
-- [ ] **Step 3: Run full verification**
+- [x] **Step 3: Run full verification**
 
 ```bash
 docker run --rm -v "$PWD:/work" -w /work golang:1.24 go test ./...
@@ -953,7 +955,7 @@ docker run --rm -v "$PWD:/work" -w /work golang:1.24 go test ./...
 
 Expected: PASS.
 
-- [ ] **Step 4: Build the CLI**
+- [x] **Step 4: Build the CLI**
 
 ```bash
 docker run --rm -v "$PWD:/work" -w /work golang:1.24 go build -ldflags "-s -w" -o ./lark ./cmd/lark

@@ -18,6 +18,19 @@ func TestSlackGatewayServeCommandIsRegistered(t *testing.T) {
 	}
 }
 
+func TestGatewayServeHasAgentBackendFlags(t *testing.T) {
+	cmd, _, err := rootCmd.Find([]string{"gateway", "serve"})
+	if err != nil {
+		t.Fatalf("Find(gateway serve) error = %v", err)
+	}
+	if cmd.Flags().Lookup("agent-backend") == nil {
+		t.Fatal("agent-backend flag is missing")
+	}
+	if cmd.Flags().Lookup("agent-binary") == nil {
+		t.Fatal("agent-binary flag is missing")
+	}
+}
+
 func TestSlackGatewayServeHasRecoverFlags(t *testing.T) {
 	cmd, _, err := rootCmd.Find([]string{"slack", "gateway", "serve"})
 	if err != nil {
@@ -28,6 +41,19 @@ func TestSlackGatewayServeHasRecoverFlags(t *testing.T) {
 	}
 	if cmd.Flags().Lookup("processing-reaction") == nil {
 		t.Fatal("processing-reaction flag is missing")
+	}
+}
+
+func TestSlackGatewayServeHasAgentBackendFlags(t *testing.T) {
+	cmd, _, err := rootCmd.Find([]string{"slack", "gateway", "serve"})
+	if err != nil {
+		t.Fatalf("Find(slack gateway serve) error = %v", err)
+	}
+	if cmd.Flags().Lookup("agent-backend") == nil {
+		t.Fatal("agent-backend flag is missing")
+	}
+	if cmd.Flags().Lookup("agent-binary") == nil {
+		t.Fatal("agent-binary flag is missing")
 	}
 }
 

@@ -492,19 +492,35 @@ type socketEnvelope struct {
 	Payload    json.RawMessage `json:"payload"`
 }
 
-// DefaultAgentConfig builds the Slack Codex agent config from environment and config files.
-func DefaultAgentConfig(enabled bool, codexBinary, workspace, model, ackText string, resultMaxChars, timeoutMinutes int) agent.Config {
-	if timeoutMinutes <= 0 {
-		timeoutMinutes = 20
+type DefaultAgentConfigInput struct {
+	Enabled        bool
+	Backend        string
+	Binary         string
+	CodexBinary    string
+	Workspace      string
+	Model          string
+	Args           []string
+	AckText        string
+	ResultMaxChars int
+	TimeoutMinutes int
+}
+
+// DefaultAgentConfig builds the Slack local agent config from environment and config files.
+func DefaultAgentConfig(input DefaultAgentConfigInput) agent.Config {
+	if input.TimeoutMinutes <= 0 {
+		input.TimeoutMinutes = 20
 	}
 	return agent.Config{
-		Enabled:        enabled,
-		CodexBinary:    codexBinary,
-		Workspace:      workspace,
-		Model:          model,
-		AckText:        ackText,
-		ResultMaxChars: resultMaxChars,
-		Timeout:        time.Duration(timeoutMinutes) * time.Minute,
+		Enabled:        input.Enabled,
+		Backend:        input.Backend,
+		Binary:         input.Binary,
+		Args:           input.Args,
+		CodexBinary:    input.CodexBinary,
+		Workspace:      input.Workspace,
+		Model:          input.Model,
+		AckText:        input.AckText,
+		ResultMaxChars: input.ResultMaxChars,
+		Timeout:        time.Duration(input.TimeoutMinutes) * time.Minute,
 	}
 }
 

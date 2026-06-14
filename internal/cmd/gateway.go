@@ -22,6 +22,8 @@ var (
 	gatewayEventLogPath   string
 	gatewayAutoReplyText  string
 	gatewayAgentEnabled   bool
+	gatewayAgentBackend   string
+	gatewayAgentBinary    string
 	gatewayAgentWorkspace string
 	gatewayDesktopWorker  bool
 )
@@ -57,6 +59,12 @@ Examples:
 		if cmd.Flags().Changed("agent") {
 			cfg.Agent.Enabled = gatewayAgentEnabled
 		}
+		if strings.TrimSpace(gatewayAgentBackend) != "" {
+			cfg.Agent.Backend = strings.TrimSpace(gatewayAgentBackend)
+		}
+		if strings.TrimSpace(gatewayAgentBinary) != "" {
+			cfg.Agent.Binary = strings.TrimSpace(gatewayAgentBinary)
+		}
 		if strings.TrimSpace(gatewayAgentWorkspace) != "" {
 			cfg.Agent.Workspace = strings.TrimSpace(gatewayAgentWorkspace)
 		}
@@ -69,6 +77,8 @@ Examples:
 			"event_log":             cfg.EventLogPath,
 			"auto_reply_enabled":    cfg.AutoReplyText != "",
 			"agent_enabled":         cfg.Agent.Enabled,
+			"agent_backend":         cfg.Agent.Backend,
+			"agent_binary":          cfg.Agent.Binary,
 			"agent_workspace":       cfg.Agent.Workspace,
 			"desktop_worker":        cfg.DesktopWorker,
 			"public_https_required": false,
@@ -86,8 +96,10 @@ Examples:
 func init() {
 	gatewayServeCmd.Flags().StringVar(&gatewayEventLogPath, "event-log", "", "path to JSONL event log file")
 	gatewayServeCmd.Flags().StringVar(&gatewayAutoReplyText, "auto-reply-text", "", "optional plain-text auto-reply template; supports {{text}}, {{chat_id}}, {{message_id}}, {{sender_open_id}}")
-	gatewayServeCmd.Flags().BoolVar(&gatewayAgentEnabled, "agent", false, "dispatch inbound Feishu messages to local codex exec tasks")
-	gatewayServeCmd.Flags().StringVar(&gatewayAgentWorkspace, "agent-workspace", "", "workspace root used when the local Codex agent executes tasks")
+	gatewayServeCmd.Flags().BoolVar(&gatewayAgentEnabled, "agent", false, "dispatch inbound Feishu messages to local agent tasks")
+	gatewayServeCmd.Flags().StringVar(&gatewayAgentBackend, "agent-backend", "", "agent backend: codex or agy")
+	gatewayServeCmd.Flags().StringVar(&gatewayAgentBinary, "agent-binary", "", "agent backend binary path or command name")
+	gatewayServeCmd.Flags().StringVar(&gatewayAgentWorkspace, "agent-workspace", "", "workspace root used when the local agent executes tasks")
 	gatewayServeCmd.Flags().BoolVar(&gatewayDesktopWorker, "desktop-worker", false, "run the local desktop task worker inside the gateway process")
 
 	gatewayCmd.AddCommand(gatewayServeCmd)

@@ -43,6 +43,8 @@ var (
 	slackGatewayEventLogPath       string
 	slackGatewayAutoReplyText      string
 	slackGatewayAgentEnabled       bool
+	slackGatewayAgentBackend       string
+	slackGatewayAgentBinary        string
 	slackGatewayAgentWorkspace     string
 	slackGatewayDesktopWorker      bool
 	slackGatewayMemoryEnabled      bool
@@ -103,17 +105,26 @@ Examples:
   lark slack gateway serve --event-log ~/.slack/gateway-events.jsonl
   lark slack gateway serve --memory --memory-root ~/.slack/conversations`,
 	Run: func(cmd *cobra.Command, args []string) {
-		agentCfg := slackgateway.DefaultAgentConfig(
-			config.GetSlackAgentEnabled(),
-			config.GetSlackAgentCodexBinary(),
-			config.GetSlackAgentWorkspace(),
-			config.GetSlackAgentModel(),
-			config.GetSlackAgentAckText(),
-			config.GetSlackAgentResultMaxChars(),
-			config.GetSlackAgentTimeoutMinutes(),
-		)
+		agentCfg := slackgateway.DefaultAgentConfig(slackgateway.DefaultAgentConfigInput{
+			Enabled:        config.GetSlackAgentEnabled(),
+			Backend:        config.GetSlackAgentBackend(),
+			Binary:         config.GetSlackAgentBinary(),
+			CodexBinary:    config.GetSlackAgentCodexBinary(),
+			Workspace:      config.GetSlackAgentWorkspace(),
+			Model:          config.GetSlackAgentModel(),
+			Args:           config.GetSlackAgentArgs(),
+			AckText:        config.GetSlackAgentAckText(),
+			ResultMaxChars: config.GetSlackAgentResultMaxChars(),
+			TimeoutMinutes: config.GetSlackAgentTimeoutMinutes(),
+		})
 		if cmd.Flags().Changed("agent") {
 			agentCfg.Enabled = slackGatewayAgentEnabled
+		}
+		if strings.TrimSpace(slackGatewayAgentBackend) != "" {
+			agentCfg.Backend = strings.TrimSpace(slackGatewayAgentBackend)
+		}
+		if strings.TrimSpace(slackGatewayAgentBinary) != "" {
+			agentCfg.Binary = strings.TrimSpace(slackGatewayAgentBinary)
 		}
 		if strings.TrimSpace(slackGatewayAgentWorkspace) != "" {
 			agentCfg.Workspace = strings.TrimSpace(slackGatewayAgentWorkspace)
@@ -166,6 +177,8 @@ Examples:
 			"event_log":                     cfg.EventLogPath,
 			"auto_reply_enabled":            cfg.AutoReplyText != "",
 			"agent_enabled":                 cfg.Agent.Enabled,
+			"agent_backend":                 cfg.Agent.Backend,
+			"agent_binary":                  cfg.Agent.Binary,
 			"agent_workspace":               cfg.Agent.Workspace,
 			"desktop_worker":                cfg.DesktopWorker,
 			"memory_enabled":                cfg.MemoryEnabled,
@@ -491,8 +504,10 @@ func init() {
 
 	slackGatewayServeCmd.Flags().StringVar(&slackGatewayEventLogPath, "event-log", "", "path to JSONL event log file")
 	slackGatewayServeCmd.Flags().StringVar(&slackGatewayAutoReplyText, "auto-reply-text", "", "optional plain-text auto-reply template; supports {{text}}, {{channel_id}}, {{message_id}}, {{user_id}}")
-	slackGatewayServeCmd.Flags().BoolVar(&slackGatewayAgentEnabled, "agent", false, "dispatch inbound Slack messages to local codex exec tasks")
-	slackGatewayServeCmd.Flags().StringVar(&slackGatewayAgentWorkspace, "agent-workspace", "", "workspace root used when the local Codex agent executes tasks")
+	slackGatewayServeCmd.Flags().BoolVar(&slackGatewayAgentEnabled, "agent", false, "dispatch inbound Slack messages to local agent tasks")
+	slackGatewayServeCmd.Flags().StringVar(&slackGatewayAgentBackend, "agent-backend", "", "agent backend: codex or agy")
+	slackGatewayServeCmd.Flags().StringVar(&slackGatewayAgentBinary, "agent-binary", "", "agent backend binary path or command name")
+	slackGatewayServeCmd.Flags().StringVar(&slackGatewayAgentWorkspace, "agent-workspace", "", "workspace root used when the local agent executes tasks")
 	slackGatewayServeCmd.Flags().BoolVar(&slackGatewayDesktopWorker, "desktop-worker", false, "run the local desktop task worker inside the gateway process")
 	slackGatewayServeCmd.Flags().BoolVar(&slackGatewayMemoryEnabled, "memory", false, "persist Slack channel and thread memory/audit files")
 	slackGatewayServeCmd.Flags().StringVar(&slackGatewayMemoryRoot, "memory-root", "", "root directory for Slack memory/audit files")

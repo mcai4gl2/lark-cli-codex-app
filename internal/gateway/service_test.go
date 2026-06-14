@@ -1,10 +1,15 @@
 package gateway
 
 import (
+	"os"
+	"path/filepath"
+	"reflect"
 	"testing"
 
 	larkevent "github.com/larksuite/oapi-sdk-go/v3/event"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
+	"github.com/spf13/viper"
+	"github.com/yjwong/lark-cli/internal/config"
 )
 
 func TestBuildLoggedEventFromWebSocketEvent(t *testing.T) {
@@ -61,6 +66,33 @@ func TestBuildLoggedEventFromWebSocketEvent(t *testing.T) {
 	}
 	if entry.UserID != "ou_123" {
 		t.Fatalf("unexpected user id: %s", entry.UserID)
+	}
+}
+
+func TestDefaultAgentConfigIncludesBackendFields(t *testing.T) {
+	viper.Reset()
+	tmp := t.TempDir()
+	cfgDir := filepath.Join(tmp, ".lark")
+	t.Setenv("LARK_CONFIG_DIR", cfgDir)
+	t.Setenv("LARK_AGENT_BACKEND", "agy")
+	t.Setenv("LARK_AGENT_BINARY", "/opt/bin/agy")
+	t.Setenv("LARK_AGENT_ARGS", "--dangerously-skip-permissions,--print-timeout=10m")
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		t.Fatalf("MkdirAll(config): %v", err)
+	}
+	if err := config.Init(); err != nil {
+		t.Fatalf("config.Init() error = %v", err)
+	}
+
+	cfg := DefaultAgentConfig()
+	if cfg.Backend != "agy" {
+		t.Fatalf("Backend = %q", cfg.Backend)
+	}
+	if cfg.Binary != "/opt/bin/agy" {
+		t.Fatalf("Binary = %q", cfg.Binary)
+	}
+	if !reflect.DeepEqual(cfg.Args, []string{"--dangerously-skip-permissions", "--print-timeout=10m"}) {
+		t.Fatalf("Args = %#v", cfg.Args)
 	}
 }
 

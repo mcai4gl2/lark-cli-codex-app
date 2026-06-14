@@ -170,12 +170,29 @@ lark gateway serve \
   --auto-reply-text "收到：{{text}}"
 ```
 
-启用本地 Codex agent：
+启用本地任务 agent（默认后端是 Codex）：
 
 ```bash
 lark gateway serve \
   --agent \
   --agent-workspace ~/WorkSpace
+```
+
+使用 Antigravity CLI 后端：
+
+```bash
+lark gateway serve \
+  --agent \
+  --agent-backend agy \
+  --agent-workspace ~/WorkSpace/project
+```
+
+首次使用 `agy` 前建议先验证本机 CLI 的非交互输出：
+
+```bash
+agy --help
+agy --version
+agy --add-dir "$PWD" --prompt "Reply with exactly: agy-ok"
 ```
 
 Desktop GUI 请求会进入单独队列。仍然支持 `/gui ` 前缀，但普通桌面请求也会被自动识别，例如：
@@ -192,7 +209,7 @@ Gateway 做的事情：
 - 接收 `im.message.receive_v1` 消息事件，不需要公网回调地址。
 - 将收到的消息事件追加到本地 JSONL 日志。
 - 可选：用机器人自动回复消息。
-- 可选：将飞书消息分发给本地 `codex exec` 执行，并把结果回复到聊天中。
+- 可选：将飞书消息分发给本地 agent 后端（`codex exec` 或 `agy`）执行，并把结果回复到聊天中。
 - 让 Codex 任务通过 `lark` 命令和 Codex skills 回写飞书/Lark。
 - 将显式 `/gui ...` 消息或自动识别出的桌面操作请求放入桌面任务队列。
 
@@ -203,7 +220,7 @@ Gateway 做的事情：
 3. 确认机器人已加入目标聊天。
 4. 在本地运行 `lark gateway serve`。
 
-如果希望机器人触发本地 Codex 任务，而不是只做普通 echo bot，可在 `config.yaml` 中启用 `agent` 配置，或启动时添加 `--agent`。
+如果希望机器人触发本地 agent 任务，而不是只做普通 echo bot，可在 `config.yaml` 中启用 `agent` 配置，或启动时添加 `--agent`。旧的 `codex_binary` 配置仍然支持；新配置优先使用 `backend` 和 `binary`。
 
 如需真正执行点击、输入等前台 GUI 操作，请让后台 gateway 专注于接收飞书消息，然后在一个有 GUI 权限的前台会话中运行：
 

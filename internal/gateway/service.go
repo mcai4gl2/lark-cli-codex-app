@@ -195,7 +195,7 @@ func stringValue(v *string) string {
 	return *v
 }
 
-// DefaultAgentConfig builds the Codex agent config from environment and config files.
+// DefaultAgentConfig builds the local agent config from environment and config files.
 func DefaultAgentConfig() agent.Config {
 	timeoutMinutes := config.GetAgentTimeoutMinutes()
 	if timeoutMinutes <= 0 {
@@ -203,6 +203,9 @@ func DefaultAgentConfig() agent.Config {
 	}
 	return agent.Config{
 		Enabled:        config.GetAgentEnabled(),
+		Backend:        config.GetAgentBackend(),
+		Binary:         config.GetAgentBinary(),
+		Args:           config.GetAgentArgs(),
 		CodexBinary:    config.GetAgentCodexBinary(),
 		Workspace:      config.GetAgentWorkspace(),
 		Model:          config.GetAgentModel(),

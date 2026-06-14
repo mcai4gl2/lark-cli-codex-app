@@ -21,13 +21,16 @@ type Config struct {
 		RedirectPort int `mapstructure:"redirect_port"`
 	} `mapstructure:"oauth"`
 	Agent struct {
-		Enabled        bool   `mapstructure:"enabled"`
-		CodexBinary    string `mapstructure:"codex_binary"`
-		Workspace      string `mapstructure:"workspace"`
-		Model          string `mapstructure:"model"`
-		AckText        string `mapstructure:"ack_text"`
-		ResultMaxChars int    `mapstructure:"result_max_chars"`
-		TimeoutMinutes int    `mapstructure:"timeout_minutes"`
+		Enabled        bool     `mapstructure:"enabled"`
+		Backend        string   `mapstructure:"backend"`
+		Binary         string   `mapstructure:"binary"`
+		Args           []string `mapstructure:"args"`
+		CodexBinary    string   `mapstructure:"codex_binary"`
+		Workspace      string   `mapstructure:"workspace"`
+		Model          string   `mapstructure:"model"`
+		AckText        string   `mapstructure:"ack_text"`
+		ResultMaxChars int      `mapstructure:"result_max_chars"`
+		TimeoutMinutes int      `mapstructure:"timeout_minutes"`
 	} `mapstructure:"agent"`
 	Gateway struct {
 		EventLog      string `mapstructure:"event_log"`
@@ -53,13 +56,16 @@ type Config struct {
 			MaxTranscriptRecords    int    `mapstructure:"max_transcript_records"`
 		} `mapstructure:"memory"`
 		Agent struct {
-			Enabled        bool   `mapstructure:"enabled"`
-			CodexBinary    string `mapstructure:"codex_binary"`
-			Workspace      string `mapstructure:"workspace"`
-			Model          string `mapstructure:"model"`
-			AckText        string `mapstructure:"ack_text"`
-			ResultMaxChars int    `mapstructure:"result_max_chars"`
-			TimeoutMinutes int    `mapstructure:"timeout_minutes"`
+			Enabled        bool     `mapstructure:"enabled"`
+			Backend        string   `mapstructure:"backend"`
+			Binary         string   `mapstructure:"binary"`
+			Args           []string `mapstructure:"args"`
+			CodexBinary    string   `mapstructure:"codex_binary"`
+			Workspace      string   `mapstructure:"workspace"`
+			Model          string   `mapstructure:"model"`
+			AckText        string   `mapstructure:"ack_text"`
+			ResultMaxChars int      `mapstructure:"result_max_chars"`
+			TimeoutMinutes int      `mapstructure:"timeout_minutes"`
 		} `mapstructure:"agent"`
 	} `mapstructure:"slack"`
 	Webhook struct {
@@ -113,6 +119,9 @@ func Init() error {
 	viper.SetDefault("defaults.reminder_minutes", 15)
 	viper.SetDefault("oauth.redirect_port", 9999)
 	viper.SetDefault("agent.enabled", false)
+	viper.SetDefault("agent.backend", "codex")
+	viper.SetDefault("agent.binary", "")
+	viper.SetDefault("agent.args", []string{})
 	viper.SetDefault("agent.codex_binary", "codex")
 	viper.SetDefault("agent.ack_text", "收到，开始处理。")
 	viper.SetDefault("agent.result_max_chars", 1800)
@@ -128,6 +137,9 @@ func Init() error {
 	viper.SetDefault("slack.memory.max_transcript_chars", 8000)
 	viper.SetDefault("slack.memory.max_transcript_records", 30)
 	viper.SetDefault("slack.agent.enabled", false)
+	viper.SetDefault("slack.agent.backend", "codex")
+	viper.SetDefault("slack.agent.binary", "")
+	viper.SetDefault("slack.agent.args", []string{})
 	viper.SetDefault("slack.agent.codex_binary", "codex")
 	viper.SetDefault("slack.agent.ack_text", "")
 	viper.SetDefault("slack.agent.result_max_chars", 3500)
@@ -140,6 +152,9 @@ func Init() error {
 	viper.BindEnv("app_id", "LARK_APP_ID")
 	viper.BindEnv("app_secret", "LARK_APP_SECRET")
 	viper.BindEnv("agent.enabled", "LARK_AGENT_ENABLED")
+	viper.BindEnv("agent.backend", "LARK_AGENT_BACKEND")
+	viper.BindEnv("agent.binary", "LARK_AGENT_BINARY")
+	viper.BindEnv("agent.args", "LARK_AGENT_ARGS")
 	viper.BindEnv("agent.codex_binary", "LARK_AGENT_CODEX_BINARY")
 	viper.BindEnv("agent.workspace", "LARK_AGENT_WORKSPACE")
 	viper.BindEnv("agent.model", "LARK_AGENT_MODEL")
@@ -153,6 +168,9 @@ func Init() error {
 	viper.BindEnv("slack.signing_secret", "SLACK_SIGNING_SECRET")
 	viper.BindEnv("slack.bot_user_id", "SLACK_BOT_USER_ID")
 	viper.BindEnv("slack.agent.enabled", "SLACK_AGENT_ENABLED")
+	viper.BindEnv("slack.agent.backend", "SLACK_AGENT_BACKEND")
+	viper.BindEnv("slack.agent.binary", "SLACK_AGENT_BINARY")
+	viper.BindEnv("slack.agent.args", "SLACK_AGENT_ARGS")
 	viper.BindEnv("slack.agent.codex_binary", "SLACK_AGENT_CODEX_BINARY")
 	viper.BindEnv("slack.agent.workspace", "SLACK_AGENT_WORKSPACE")
 	viper.BindEnv("slack.agent.model", "SLACK_AGENT_MODEL")
@@ -233,6 +251,21 @@ func GetRedirectPort() int {
 // GetAgentEnabled returns whether inbound messages should be dispatched to local Codex tasks.
 func GetAgentEnabled() bool {
 	return viper.GetBool("agent.enabled")
+}
+
+// GetAgentBackend returns the local agent backend name.
+func GetAgentBackend() string {
+	return strings.TrimSpace(viper.GetString("agent.backend"))
+}
+
+// GetAgentBinary returns the neutral local agent binary path or command name.
+func GetAgentBinary() string {
+	return strings.TrimSpace(viper.GetString("agent.binary"))
+}
+
+// GetAgentArgs returns extra arguments appended to the local agent backend command.
+func GetAgentArgs() []string {
+	return cleanStringSlice(viper.GetStringSlice("agent.args"), viper.GetString("agent.args"))
 }
 
 // GetAgentCodexBinary returns the codex binary path or command name.
@@ -408,6 +441,21 @@ func GetSlackAgentEnabled() bool {
 	return viper.GetBool("slack.agent.enabled")
 }
 
+// GetSlackAgentBackend returns the Slack local agent backend name.
+func GetSlackAgentBackend() string {
+	return strings.TrimSpace(viper.GetString("slack.agent.backend"))
+}
+
+// GetSlackAgentBinary returns the neutral Slack local agent binary path or command name.
+func GetSlackAgentBinary() string {
+	return strings.TrimSpace(viper.GetString("slack.agent.binary"))
+}
+
+// GetSlackAgentArgs returns extra arguments appended to the Slack local agent backend command.
+func GetSlackAgentArgs() []string {
+	return cleanStringSlice(viper.GetStringSlice("slack.agent.args"), viper.GetString("slack.agent.args"))
+}
+
 // GetSlackAgentCodexBinary returns the codex binary path or command name for Slack tasks.
 func GetSlackAgentCodexBinary() string {
 	return strings.TrimSpace(viper.GetString("slack.agent.codex_binary"))
@@ -497,4 +545,19 @@ func TenantTokensFilePath() string {
 // GetCustomEmojis returns the custom emoji mappings
 func GetCustomEmojis() map[string]string {
 	return viper.GetStringMapString("custom_emojis")
+}
+
+func cleanStringSlice(values []string, raw string) []string {
+	if strings.Contains(raw, ",") {
+		values = strings.Split(raw, ",")
+	} else if len(values) == 0 && strings.TrimSpace(raw) != "" {
+		values = strings.Split(raw, ",")
+	}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }

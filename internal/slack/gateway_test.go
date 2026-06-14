@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/yjwong/lark-cli/internal/agent"
 	"github.com/yjwong/lark-cli/internal/platform"
 	"github.com/yjwong/lark-cli/internal/slackmemory"
 )
@@ -25,6 +26,32 @@ type captureMessenger struct {
 	mu      sync.Mutex
 	replies []string
 	events  []platform.MessageEvent
+}
+
+func TestDefaultAgentConfigIncludesBackendFields(t *testing.T) {
+	cfg := DefaultAgentConfig(DefaultAgentConfigInput{
+		Enabled:        true,
+		Backend:        "agy",
+		Binary:         "/opt/bin/agy",
+		CodexBinary:    "legacy-codex",
+		Workspace:      "/workspace",
+		Model:          "gemini-test",
+		Args:           []string{"--dangerously-skip-permissions"},
+		AckText:        "working",
+		ResultMaxChars: 1234,
+		TimeoutMinutes: 7,
+	})
+
+	if cfg.Backend != "agy" || cfg.Binary != "/opt/bin/agy" || cfg.CodexBinary != "legacy-codex" {
+		t.Fatalf("backend fields = %#v", cfg)
+	}
+	if len(cfg.Args) != 1 || cfg.Args[0] != "--dangerously-skip-permissions" {
+		t.Fatalf("Args = %#v", cfg.Args)
+	}
+	if cfg.Timeout != 7*time.Minute {
+		t.Fatalf("Timeout = %s", cfg.Timeout)
+	}
+	var _ agent.Config = cfg
 }
 
 func (m *captureMessenger) Reply(_ context.Context, event platform.MessageEvent, text string) error {

@@ -54,6 +54,45 @@ This opens a browser for OAuth authorization.
 
 All commands output JSON by default.
 
+### Local Gateway Agent Backends
+
+The Lark and Slack gateways can dispatch inbound chat tasks to a local coding
+agent. Codex remains the default backend, and Antigravity CLI can be selected
+with `agy`:
+
+```bash
+./lark gateway serve --agent --agent-backend agy --agent-workspace ~/WorkSpace/project
+./lark slack gateway serve --agent --agent-backend agy --agent-workspace ~/WorkSpace/project
+```
+
+Backend config:
+
+```yaml
+agent:
+  enabled: true
+  backend: "codex" # codex or agy
+  binary: ""       # empty uses backend default
+  args: []
+
+slack:
+  agent:
+    enabled: true
+    backend: "agy"
+    binary: "agy"
+    workspace: "~/WorkSpace/project"
+```
+
+Before using `agy`, validate the installed CLI contract:
+
+```bash
+agy --help
+agy --version
+agy --add-dir "$PWD" --prompt "Reply with exactly: agy-ok"
+```
+
+`codex_binary` is still accepted for older Codex-only configs, but new configs
+should use `backend`, `binary`, and `args`.
+
 ### Authentication
 
 ```bash

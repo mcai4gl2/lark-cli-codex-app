@@ -155,8 +155,11 @@ Optional agent configuration:
 
 ```bash
 export SLACK_AGENT_ENABLED=true
+export SLACK_AGENT_BACKEND="codex"   # codex or agy
+export SLACK_AGENT_BINARY=""         # empty uses backend default
+export SLACK_AGENT_ARGS=""           # comma-separated extra backend args
 export SLACK_AGENT_WORKSPACE="$HOME/WorkSpace"
-export SLACK_AGENT_CODEX_BINARY="codex"
+export SLACK_AGENT_CODEX_BINARY="codex"  # legacy Codex-only alias
 export SLACK_AGENT_ACK_TEXT="Received. Working on it."
 export SLACK_AGENT_RESULT_MAX_CHARS=3500
 export SLACK_AGENT_TIMEOUT_MINUTES=20
@@ -178,10 +181,10 @@ There are two different local folders to understand:
 | Folder type | Purpose |
 | --- | --- |
 | Config/state folder | Stores config, event logs, and desktop task queue state. |
-| Codex workspace folder | The folder where `codex exec` is launched for an inbound Slack task. |
+| Agent workspace folder | The folder where the selected backend starts for an inbound Slack task. |
 
-The Codex workspace is the important folder for agent behavior. When a Slack
-message triggers the agent, this project runs Codex roughly like this:
+The agent workspace is the important folder for backend behavior. With the
+default Codex backend, a Slack message runs roughly like this:
 
 ```bash
 codex -a never -s workspace-write exec \
@@ -194,6 +197,38 @@ codex -a never -s workspace-write exec \
 The `-C "$WORKSPACE"` argument controls where Codex starts. If your Slack
 message does not mention a folder or repository, Codex still starts in this
 configured workspace and interprets the request from there.
+
+With the Antigravity CLI backend, first validate the installed `agy` binary:
+
+```bash
+agy --help
+agy --version
+agy --add-dir "$PWD" --prompt "Reply with exactly: agy-ok"
+```
+
+Then run the gateway with:
+
+```bash
+./lark slack gateway serve \
+  --agent \
+  --agent-backend agy \
+  --agent-workspace "$HOME/WorkSpace/lark-cli-codex-app"
+```
+
+Config equivalent:
+
+```yaml
+slack:
+  agent:
+    enabled: true
+    backend: "agy"
+    binary: "agy"
+    workspace: "~/WorkSpace/lark-cli-codex-app"
+    model: ""
+```
+
+`codex_binary` remains supported for old Codex-only configs, but new configs
+should prefer `backend`, `binary`, and `args`.
 
 Slack workspace selection order:
 
@@ -662,8 +697,10 @@ Common flags:
 
 | Flag | Purpose |
 | --- | --- |
-| `--agent` | Dispatch Slack messages to `codex exec`. |
-| `--agent-workspace PATH` | Workspace root used by Codex tasks. |
+| `--agent` | Dispatch Slack messages to the configured local agent backend. |
+| `--agent-backend NAME` | Agent backend: `codex` or `agy`. |
+| `--agent-binary PATH` | Backend binary path or command name. |
+| `--agent-workspace PATH` | Workspace root used by agent tasks. |
 | `--memory` | Persist Slack audit logs and load explicit memory Markdown into prompts. |
 | `--memory-root PATH` | Root folder for channel/thread memory and audit files. |
 | `--memory-max-section-chars N` | Per-section character limit for loaded memory Markdown. |
@@ -832,10 +869,12 @@ The bot cannot see a channel
 - For private channels, invite the bot and grant `groups:history` if you need
   history reads.
 
-Codex does not run
+Agent does not run
 
 - Start the gateway with `--agent` or set `SLACK_AGENT_ENABLED=true`.
-- Confirm `codex` is installed and available, or set `SLACK_AGENT_CODEX_BINARY`.
+- Confirm the selected backend is installed and available. For new configs, use
+  `SLACK_AGENT_BACKEND` and `SLACK_AGENT_BINARY`; `SLACK_AGENT_CODEX_BINARY`
+  remains supported for legacy Codex configs.
 - Confirm `--agent-workspace` or `SLACK_AGENT_WORKSPACE` points to the intended
   workspace.
 

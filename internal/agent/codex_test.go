@@ -126,7 +126,7 @@ func TestBuildPromptIncludesMemoryContext(t *testing.T) {
 		UserID:      "U123",
 		MessageID:   "1712345678.000100",
 		MessageText: "continue this thread",
-	}, 1200, "## Slack thread summary\nWe agreed to use two apps.")
+	}, 1200, backendLabel("codex"), "## Slack thread summary\nWe agreed to use two apps.")
 
 	if !strings.Contains(prompt, "可用历史记忆和摘要") {
 		t.Fatalf("prompt did not include memory label: %q", prompt)
@@ -142,6 +142,86 @@ func TestBuildPromptIncludesMemoryContext(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "continue this thread") {
 		t.Fatalf("prompt did not include message: %q", prompt)
+	}
+}
+
+func TestNormalizeBackendName(t *testing.T) {
+	tests := map[string]string{
+		"":                "codex",
+		"codex":           "codex",
+		" CODEX ":         "codex",
+		"agy":             "agy",
+		"antigravity":     "agy",
+		"antigravity-cli": "agy",
+		"unknown-value":   "codex",
+	}
+	for input, want := range tests {
+		if got := normalizeBackendName(input); got != want {
+			t.Fatalf("normalizeBackendName(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
+func TestResolveBackendBinary(t *testing.T) {
+	cfg := Config{Backend: "codex", Binary: "", CodexBinary: "custom-codex"}
+	backend := testBackend{name: "codex", defaultBinary: "codex"}
+	if got := resolveBackendBinary(cfg, backend); got != "custom-codex" {
+		t.Fatalf("binary = %q, want custom-codex", got)
+	}
+
+	cfg = Config{Backend: "agy"}
+	backend = testBackend{name: "agy", defaultBinary: "agy"}
+	if got := resolveBackendBinary(cfg, backend); got != "agy" {
+		t.Fatalf("binary = %q, want agy", got)
+	}
+
+	cfg = Config{Backend: "agy", Binary: " /opt/bin/agy "}
+	if got := resolveBackendBinary(cfg, backend); got != "/opt/bin/agy" {
+		t.Fatalf("binary = %q, want /opt/bin/agy", got)
+	}
+}
+
+type testBackend struct {
+	name          string
+	defaultBinary string
+}
+
+func (b testBackend) Name() string { return b.name }
+
+func (b testBackend) DefaultBinary() string { return b.defaultBinary }
+
+func (b testBackend) Execute(context.Context, BackendRequest) (string, error) {
+	return "", nil
+}
+
+func TestCodexBackendExecuteReturnsLastMessageOutput(t *testing.T) {
+	tempDir := t.TempDir()
+	backend := CodexBackend{}
+	result, err := backend.Execute(context.Background(), BackendRequest{
+		Entry: inbound.LoggedEvent{
+			Provider:    "slack",
+			ChannelID:   "C123",
+			MessageID:   "1712345678.000100",
+			MessageText: "do the thing",
+		},
+		Prompt:         "prompt text",
+		Workspace:      t.TempDir(),
+		Binary:         fakeCodexExecutable(t),
+		ResultMaxChars: 100,
+		TempDir:        tempDir,
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result != "codex final output" {
+		t.Fatalf("result = %q", result)
+	}
+}
+
+func TestResolveBackendSelectsAgy(t *testing.T) {
+	backend := resolveBackend(Config{Backend: "agy"})
+	if backend.Name() != "agy" {
+		t.Fatalf("backend = %q, want agy", backend.Name())
 	}
 }
 

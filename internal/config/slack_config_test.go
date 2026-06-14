@@ -1,7 +1,9 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -145,5 +147,98 @@ func TestSlackMemoryLimitFallbacks(t *testing.T) {
 	}
 	if got := GetSlackMemoryMaxTranscriptRecords(); got != 30 {
 		t.Fatalf("GetSlackMemoryMaxTranscriptRecords() = %d", got)
+	}
+}
+
+func TestAgentBackendConfigFromYAML(t *testing.T) {
+	viper.Reset()
+	tmp := t.TempDir()
+	cfgDir := filepath.Join(tmp, ".lark")
+	t.Setenv("LARK_CONFIG_DIR", cfgDir)
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		t.Fatalf("MkdirAll(config): %v", err)
+	}
+	configYAML := []byte(`
+agent:
+  backend: agy
+  binary: /opt/bin/agy
+  args:
+    - --dangerously-skip-permissions
+    - --print-timeout=10m
+slack:
+  agent:
+    backend: agy
+    binary: /usr/local/bin/agy
+    args:
+      - --sandbox
+      - --print-timeout=8m
+`)
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), configYAML, 0o600); err != nil {
+		t.Fatalf("WriteFile(config): %v", err)
+	}
+
+	if err := Init(); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	if got := GetAgentBackend(); got != "agy" {
+		t.Fatalf("GetAgentBackend() = %q", got)
+	}
+	if got := GetAgentBinary(); got != "/opt/bin/agy" {
+		t.Fatalf("GetAgentBinary() = %q", got)
+	}
+	if got := GetAgentArgs(); !reflect.DeepEqual(got, []string{"--dangerously-skip-permissions", "--print-timeout=10m"}) {
+		t.Fatalf("GetAgentArgs() = %#v", got)
+	}
+	if got := GetSlackAgentBackend(); got != "agy" {
+		t.Fatalf("GetSlackAgentBackend() = %q", got)
+	}
+	if got := GetSlackAgentBinary(); got != "/usr/local/bin/agy" {
+		t.Fatalf("GetSlackAgentBinary() = %q", got)
+	}
+	if got := GetSlackAgentArgs(); !reflect.DeepEqual(got, []string{"--sandbox", "--print-timeout=8m"}) {
+		t.Fatalf("GetSlackAgentArgs() = %#v", got)
+	}
+}
+
+func TestSlackAgentBackendEnvOverridesFileConfig(t *testing.T) {
+	viper.Reset()
+	tmp := t.TempDir()
+	cfgDir := filepath.Join(tmp, ".lark")
+	t.Setenv("LARK_CONFIG_DIR", cfgDir)
+	t.Setenv("SLACK_AGENT_BACKEND", "agy")
+	t.Setenv("SLACK_AGENT_BINARY", "/env/bin/agy")
+	t.Setenv("SLACK_AGENT_ARGS", " --sandbox, ,--print-timeout=9m ")
+	t.Setenv("SLACK_AGENT_CODEX_BINARY", "legacy-codex")
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		t.Fatalf("MkdirAll(config): %v", err)
+	}
+	configYAML := []byte(`
+slack:
+  agent:
+    backend: codex
+    binary: /file/bin/codex
+    args:
+      - --file-arg
+`)
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), configYAML, 0o600); err != nil {
+		t.Fatalf("WriteFile(config): %v", err)
+	}
+
+	if err := Init(); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	if got := GetSlackAgentBackend(); got != "agy" {
+		t.Fatalf("GetSlackAgentBackend() = %q", got)
+	}
+	if got := GetSlackAgentBinary(); got != "/env/bin/agy" {
+		t.Fatalf("GetSlackAgentBinary() = %q", got)
+	}
+	if got := GetSlackAgentArgs(); !reflect.DeepEqual(got, []string{"--sandbox", "--print-timeout=9m"}) {
+		t.Fatalf("GetSlackAgentArgs() = %#v", got)
+	}
+	if got := GetSlackAgentCodexBinary(); got != "legacy-codex" {
+		t.Fatalf("GetSlackAgentCodexBinary() = %q", got)
 	}
 }
