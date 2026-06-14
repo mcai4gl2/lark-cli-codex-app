@@ -1,8 +1,10 @@
 package slackmemory
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -87,6 +89,42 @@ func (s *Store) RecordOutbound(event platform.MessageEvent, text string) error {
 	}
 
 	return s.appendJSONL(s.threadEventsPath(event), record)
+}
+
+func (s *Store) ThreadRecords(event platform.MessageEvent) ([]ConversationRecord, error) {
+	if !s.Enabled() {
+		return nil, nil
+	}
+
+	path := s.threadEventsPath(event)
+	file, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer file.Close()
+
+	var records []ConversationRecord
+	scanner := bufio.NewScanner(file)
+	lineNumber := 0
+	for scanner.Scan() {
+		lineNumber++
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var record ConversationRecord
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			return nil, fmt.Errorf("%s:%d: decode conversation record: %w", path, lineNumber, err)
+		}
+		records = append(records, record)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return records, nil
 }
 
 func (s *Store) ChannelDir(event platform.MessageEvent) string {

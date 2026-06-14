@@ -85,6 +85,90 @@ func TestStoreWritesOutboundEventToThreadOnly(t *testing.T) {
 	}
 }
 
+func TestStoreReadsThreadRecordsInChronologicalOrder(t *testing.T) {
+	root := t.TempDir()
+	store := NewStore(Config{Root: root})
+	event := platform.MessageEvent{
+		Provider:  "slack",
+		TeamID:    "T123",
+		ChannelID: "C123",
+		ThreadID:  "1710000000.000100",
+		MessageID: "1710000000.000300",
+	}
+	first := event
+	first.MessageID = "1710000000.000100"
+	first.MessageText = "first"
+	second := event
+	second.MessageID = "1710000000.000200"
+	second.MessageText = "second"
+
+	if err := store.RecordInbound(first); err != nil {
+		t.Fatalf("RecordInbound(first) error = %v", err)
+	}
+	if err := store.RecordInbound(second); err != nil {
+		t.Fatalf("RecordInbound(second) error = %v", err)
+	}
+	if err := store.RecordOutbound(second, "reply"); err != nil {
+		t.Fatalf("RecordOutbound() error = %v", err)
+	}
+
+	records, err := store.ThreadRecords(event)
+	if err != nil {
+		t.Fatalf("ThreadRecords() error = %v", err)
+	}
+	if len(records) != 3 {
+		t.Fatalf("record count = %d", len(records))
+	}
+	if records[0].Text != "first" || records[1].Text != "second" || records[2].Text != "reply" {
+		t.Fatalf("records = %+v", records)
+	}
+}
+
+func TestStoreThreadRecordsReturnsEmptyForMissingLog(t *testing.T) {
+	store := NewStore(Config{Root: t.TempDir()})
+	event := platform.MessageEvent{
+		Provider:  "slack",
+		TeamID:    "T123",
+		ChannelID: "C123",
+		ThreadID:  "1710000000.000100",
+		MessageID: "1710000000.000100",
+	}
+
+	records, err := store.ThreadRecords(event)
+	if err != nil {
+		t.Fatalf("ThreadRecords() error = %v", err)
+	}
+	if len(records) != 0 {
+		t.Fatalf("records = %+v", records)
+	}
+}
+
+func TestStoreThreadRecordsReportsMalformedJSONLine(t *testing.T) {
+	store := NewStore(Config{Root: t.TempDir()})
+	event := platform.MessageEvent{
+		Provider:  "slack",
+		TeamID:    "T123",
+		ChannelID: "C123",
+		ThreadID:  "1710000000.000100",
+		MessageID: "1710000000.000100",
+	}
+	path := store.threadEventsPath(event)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("{bad json}\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, err := store.ThreadRecords(event)
+	if err == nil {
+		t.Fatal("ThreadRecords() error = nil")
+	}
+	if !strings.Contains(err.Error(), "events.jsonl:1") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
 func TestStoreEnabledReflectsRoot(t *testing.T) {
 	if NewStore(Config{}).Enabled() {
 		t.Fatal("empty root store Enabled() = true")

@@ -246,8 +246,9 @@ In lark-cli-codex-app, inspect the Slack gateway tests.
 When Slack memory is enabled, the gateway writes inbound records to both the
 thread log and the channel daily log under `.slack/conversations/`. Final Codex
 replies are written to the thread log. Before dispatching a Slack task to Codex,
-the gateway loads existing channel memory, thread memory, and thread summaries
-into the prompt when those Markdown files exist.
+the gateway loads existing channel memory, thread memory, thread summaries, and
+a bounded recent thread transcript into the prompt when those files or records
+exist.
 
 Enable it with `--memory`:
 
@@ -536,14 +537,26 @@ The files have different purposes:
 
 - `daily/YYYY-MM-DD.jsonl` stores inbound records for channel-level audit.
 - `threads/<thread-ts>/events.jsonl` stores inbound records and final outbound
-  Codex replies for that thread.
+  Codex replies for that thread. Recent records are injected into future Codex
+  prompts so follow-up replies have conversational context.
 - Channel `memory.md` stores durable channel facts and preferences.
 - Thread `memory.md` stores durable thread-specific facts.
 - Thread `summary.md` stores prompt-efficient summaries for long threads.
 
-The gateway loads channel memory, thread memory, and thread summary Markdown
-into the Codex prompt when those files exist. It does not automatically
-summarize long threads yet.
+The gateway loads channel memory, thread memory, thread summary Markdown, and a
+bounded recent transcript from `events.jsonl` into the Codex prompt when those
+files or records exist. It does not automatically summarize long threads yet.
+
+Transcript injection is controlled by:
+
+```bash
+SLACK_MEMORY_INCLUDE_THREAD_TRANSCRIPT=true
+SLACK_MEMORY_MAX_TRANSCRIPT_CHARS=8000
+SLACK_MEMORY_MAX_TRANSCRIPT_RECORDS=30
+```
+
+The transcript is background context only. The latest user message remains the
+primary request.
 
 Useful commands:
 

@@ -120,19 +120,22 @@ Examples:
 		}
 
 		cfg := slackgateway.Config{
-			AppToken:               config.GetSlackAppToken(),
-			BotToken:               config.GetSlackBotToken(),
-			BotUserID:              config.GetSlackBotUserID(),
-			EventLogPath:           slackGatewayEventLogPath,
-			AutoReplyText:          slackGatewayAutoReplyText,
-			Agent:                  agentCfg,
-			DesktopWorker:          slackGatewayDesktopWorker,
-			DesktopQueueRoot:       config.GetSlackDesktopTaskRoot(),
-			MemoryEnabled:          config.GetSlackMemoryEnabled(),
-			MemoryRoot:             config.GetSlackMemoryRoot(),
-			MemoryMaxSectionChars:  config.GetSlackMemoryMaxSectionChars(),
-			RecoverMode:            slackgateway.NormalizeRecoverMode(config.GetSlackGatewayRecoverMode()),
-			ProcessingReactionName: config.GetSlackGatewayProcessingReaction(),
+			AppToken:                      config.GetSlackAppToken(),
+			BotToken:                      config.GetSlackBotToken(),
+			BotUserID:                     config.GetSlackBotUserID(),
+			EventLogPath:                  slackGatewayEventLogPath,
+			AutoReplyText:                 slackGatewayAutoReplyText,
+			Agent:                         agentCfg,
+			DesktopWorker:                 slackGatewayDesktopWorker,
+			DesktopQueueRoot:              config.GetSlackDesktopTaskRoot(),
+			MemoryEnabled:                 config.GetSlackMemoryEnabled(),
+			MemoryRoot:                    config.GetSlackMemoryRoot(),
+			MemoryMaxSectionChars:         config.GetSlackMemoryMaxSectionChars(),
+			MemoryIncludeThreadTranscript: config.GetSlackMemoryIncludeThreadTranscript(),
+			MemoryMaxTranscriptChars:      config.GetSlackMemoryMaxTranscriptChars(),
+			MemoryMaxTranscriptRecords:    config.GetSlackMemoryMaxTranscriptRecords(),
+			RecoverMode:                   slackgateway.NormalizeRecoverMode(config.GetSlackGatewayRecoverMode()),
+			ProcessingReactionName:        config.GetSlackGatewayProcessingReaction(),
 		}
 		if cfg.EventLogPath == "" {
 			cfg.EventLogPath = config.GetSlackGatewayEventLogPath()
@@ -158,19 +161,22 @@ Examples:
 
 		service := slackgateway.NewGateway(cfg)
 		output.JSON(map[string]interface{}{
-			"ok":                    true,
-			"mode":                  "slack_socket_mode",
-			"event_log":             cfg.EventLogPath,
-			"auto_reply_enabled":    cfg.AutoReplyText != "",
-			"agent_enabled":         cfg.Agent.Enabled,
-			"agent_workspace":       cfg.Agent.Workspace,
-			"desktop_worker":        cfg.DesktopWorker,
-			"memory_enabled":        cfg.MemoryEnabled,
-			"memory_root":           cfg.MemoryRoot,
-			"memory_max_chars":      cfg.MemoryMaxSectionChars,
-			"recover_mode":          cfg.RecoverMode,
-			"processing_reaction":   cfg.ProcessingReactionName,
-			"public_https_required": false,
+			"ok":                            true,
+			"mode":                          "slack_socket_mode",
+			"event_log":                     cfg.EventLogPath,
+			"auto_reply_enabled":            cfg.AutoReplyText != "",
+			"agent_enabled":                 cfg.Agent.Enabled,
+			"agent_workspace":               cfg.Agent.Workspace,
+			"desktop_worker":                cfg.DesktopWorker,
+			"memory_enabled":                cfg.MemoryEnabled,
+			"memory_root":                   cfg.MemoryRoot,
+			"memory_max_chars":              cfg.MemoryMaxSectionChars,
+			"memory_thread_transcript":      cfg.MemoryIncludeThreadTranscript,
+			"memory_transcript_max_chars":   cfg.MemoryMaxTranscriptChars,
+			"memory_transcript_max_records": cfg.MemoryMaxTranscriptRecords,
+			"recover_mode":                  cfg.RecoverMode,
+			"processing_reaction":           cfg.ProcessingReactionName,
+			"public_https_required":         false,
 		})
 
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

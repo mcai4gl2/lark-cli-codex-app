@@ -25,22 +25,25 @@ type AgentConfig = agent.Config
 
 // Config configures the Slack Socket Mode gateway.
 type Config struct {
-	AppToken               string
-	BotToken               string
-	BotUserID              string
-	EventLogPath           string
-	AutoReplyText          string
-	Agent                  AgentConfig
-	DesktopWorker          bool
-	DesktopQueueRoot       string
-	MemoryEnabled          bool
-	MemoryRoot             string
-	MemoryMaxSectionChars  int
-	RecoverMode            RecoverMode
-	RecoveryPollInterval   time.Duration
-	ProcessingReactionName string
-	Messenger              platform.Messenger
-	APIBaseURL             string
+	AppToken                      string
+	BotToken                      string
+	BotUserID                     string
+	EventLogPath                  string
+	AutoReplyText                 string
+	Agent                         AgentConfig
+	DesktopWorker                 bool
+	DesktopQueueRoot              string
+	MemoryEnabled                 bool
+	MemoryRoot                    string
+	MemoryMaxSectionChars         int
+	MemoryIncludeThreadTranscript bool
+	MemoryMaxTranscriptChars      int
+	MemoryMaxTranscriptRecords    int
+	RecoverMode                   RecoverMode
+	RecoveryPollInterval          time.Duration
+	ProcessingReactionName        string
+	Messenger                     platform.Messenger
+	APIBaseURL                    string
 }
 
 // Gateway receives Slack Socket Mode events and routes them through shared code.
@@ -84,7 +87,13 @@ func NewGateway(cfg Config) *Gateway {
 	var memoryStore *slackmemory.Store
 	if cfg.MemoryEnabled && strings.TrimSpace(cfg.MemoryRoot) != "" {
 		memoryStore = slackmemory.NewStore(slackmemory.Config{Root: cfg.MemoryRoot})
-		cfg.Agent.ContextProvider = memoryPromptProvider{store: memoryStore, maxSectionChars: cfg.MemoryMaxSectionChars}
+		cfg.Agent.ContextProvider = memoryPromptProvider{
+			store:                   memoryStore,
+			maxSectionChars:         cfg.MemoryMaxSectionChars,
+			includeThreadTranscript: cfg.MemoryIncludeThreadTranscript,
+			maxTranscriptChars:      cfg.MemoryMaxTranscriptChars,
+			maxTranscriptRecords:    cfg.MemoryMaxTranscriptRecords,
+		}
 		cfg.Agent.ReplyObserver = memoryReplyObserver{store: memoryStore}
 	}
 	var recovery *RecoveryStore
@@ -500,13 +509,19 @@ func DefaultAgentConfig(enabled bool, codexBinary, workspace, model, ackText str
 }
 
 type memoryPromptProvider struct {
-	store           *slackmemory.Store
-	maxSectionChars int
+	store                   *slackmemory.Store
+	maxSectionChars         int
+	includeThreadTranscript bool
+	maxTranscriptChars      int
+	maxTranscriptRecords    int
 }
 
 func (p memoryPromptProvider) PromptContext(entry inbound.LoggedEvent) (string, error) {
 	return slackmemory.BuildPromptContext(p.store, entry, slackmemory.ContextOptions{
-		MaxSectionChars: p.maxSectionChars,
+		MaxSectionChars:         p.maxSectionChars,
+		IncludeThreadTranscript: p.includeThreadTranscript,
+		MaxTranscriptChars:      p.maxTranscriptChars,
+		MaxTranscriptRecords:    p.maxTranscriptRecords,
 	})
 }
 

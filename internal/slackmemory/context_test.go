@@ -33,6 +33,95 @@ func TestBuildPromptContextIncludesChannelThreadMemoryAndSummary(t *testing.T) {
 	}
 }
 
+func TestBuildPromptContextIncludesRecentThreadTranscript(t *testing.T) {
+	root := t.TempDir()
+	store := NewStore(Config{Root: root})
+	event := platform.MessageEvent{
+		Provider:    "slack",
+		TeamID:      "T123",
+		ChannelID:   "C123",
+		ThreadID:    "171.1",
+		MessageID:   "171.3",
+		UserID:      "U123",
+		MessageText: "current message",
+		ReceivedAt:  "2026-06-14T10:03:00Z",
+	}
+	previous := event
+	previous.MessageID = "171.1"
+	previous.MessageText = "previous request"
+	previous.ReceivedAt = "2026-06-14T10:01:00Z"
+	current := event
+
+	if err := store.RecordInbound(previous); err != nil {
+		t.Fatalf("RecordInbound(previous) error = %v", err)
+	}
+	if err := store.RecordOutbound(previous, "previous reply"); err != nil {
+		t.Fatalf("RecordOutbound() error = %v", err)
+	}
+	if err := store.RecordInbound(current); err != nil {
+		t.Fatalf("RecordInbound(current) error = %v", err)
+	}
+
+	ctx, err := BuildPromptContext(store, event, ContextOptions{
+		MaxSectionChars:         500,
+		IncludeThreadTranscript: true,
+		MaxTranscriptChars:      1000,
+		MaxTranscriptRecords:    10,
+	})
+	if err != nil {
+		t.Fatalf("BuildPromptContext() error = %v", err)
+	}
+
+	if !strings.Contains(ctx, "## Slack recent thread transcript") {
+		t.Fatalf("context missing transcript section: %q", ctx)
+	}
+	if !strings.Contains(ctx, "User: previous request") || !strings.Contains(ctx, "Codex: previous reply") {
+		t.Fatalf("context missing prior conversation: %q", ctx)
+	}
+	if strings.Contains(ctx, "current message") {
+		t.Fatalf("context included current message: %q", ctx)
+	}
+}
+
+func TestBuildPromptContextRecentTranscriptRespectsLimits(t *testing.T) {
+	store := NewStore(Config{Root: t.TempDir()})
+	event := platform.MessageEvent{
+		Provider:  "slack",
+		TeamID:    "T123",
+		ChannelID: "C123",
+		ThreadID:  "171.1",
+		MessageID: "171.4",
+		UserID:    "U123",
+	}
+	for i, text := range []string{"oldest message", "middle message", "newest message"} {
+		recordEvent := event
+		recordEvent.MessageID = "171." + string(rune('1'+i))
+		recordEvent.MessageText = text
+		if err := store.RecordInbound(recordEvent); err != nil {
+			t.Fatalf("RecordInbound(%s) error = %v", text, err)
+		}
+	}
+
+	ctx, err := BuildPromptContext(store, event, ContextOptions{
+		IncludeThreadTranscript: true,
+		MaxTranscriptChars:      1000,
+		MaxTranscriptRecords:    2,
+	})
+	if err != nil {
+		t.Fatalf("BuildPromptContext() error = %v", err)
+	}
+
+	if !strings.Contains(ctx, "Older thread messages omitted") {
+		t.Fatalf("context missing truncation note: %q", ctx)
+	}
+	if strings.Contains(ctx, "oldest message") {
+		t.Fatalf("context included oldest record: %q", ctx)
+	}
+	if !strings.Contains(ctx, "middle message") || !strings.Contains(ctx, "newest message") {
+		t.Fatalf("context missing newest records: %q", ctx)
+	}
+}
+
 func TestBuildPromptContextReturnsEmptyForMissingFiles(t *testing.T) {
 	store := NewStore(Config{Root: t.TempDir()})
 	event := platform.MessageEvent{TeamID: "T123", ChannelID: "C123", ThreadID: "171.1", MessageID: "171.1"}

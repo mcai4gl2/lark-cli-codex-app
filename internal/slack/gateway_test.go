@@ -18,6 +18,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/yjwong/lark-cli/internal/platform"
+	"github.com/yjwong/lark-cli/internal/slackmemory"
 )
 
 type captureMessenger struct {
@@ -994,6 +995,86 @@ func TestNewGatewayWiresSlackMemoryIntoAgentConfig(t *testing.T) {
 	}
 	if !strings.Contains(string(data), `"direction":"outbound"`) || !strings.Contains(string(data), `"text":"done"`) {
 		t.Fatalf("thread events = %q", string(data))
+	}
+}
+
+func TestNewGatewayWiresRecentTranscriptIntoAgentContext(t *testing.T) {
+	memoryRoot := t.TempDir()
+	store := slackmemory.NewStore(slackmemory.Config{Root: memoryRoot})
+	event := platform.MessageEvent{
+		Provider:    "slack",
+		TeamID:      "T123",
+		ChannelID:   "C345",
+		ThreadID:    "1710000000.000100",
+		MessageID:   "1710000000.000100",
+		UserID:      "U123",
+		MessageText: "prior request",
+	}
+	if err := store.RecordInbound(event); err != nil {
+		t.Fatalf("RecordInbound() error = %v", err)
+	}
+
+	service := NewGateway(Config{
+		EventLogPath:                  filepath.Join(t.TempDir(), "events.jsonl"),
+		BotUserID:                     "U999",
+		Messenger:                     &captureMessenger{},
+		MemoryEnabled:                 true,
+		MemoryRoot:                    memoryRoot,
+		MemoryIncludeThreadTranscript: true,
+		MemoryMaxTranscriptChars:      1000,
+		MemoryMaxTranscriptRecords:    10,
+		Agent:                         AgentConfig{Enabled: false},
+		DesktopQueueRoot:              t.TempDir(),
+	})
+
+	current := event
+	current.MessageID = "1710000000.000200"
+	current.MessageText = "current request"
+	contextText, err := service.cfg.Agent.ContextProvider.PromptContext(current)
+	if err != nil {
+		t.Fatalf("PromptContext() error = %v", err)
+	}
+	if !strings.Contains(contextText, "## Slack recent thread transcript") || !strings.Contains(contextText, "prior request") {
+		t.Fatalf("context text = %q", contextText)
+	}
+}
+
+func TestNewGatewayCanDisableRecentTranscriptContext(t *testing.T) {
+	memoryRoot := t.TempDir()
+	store := slackmemory.NewStore(slackmemory.Config{Root: memoryRoot})
+	event := platform.MessageEvent{
+		Provider:    "slack",
+		TeamID:      "T123",
+		ChannelID:   "C345",
+		ThreadID:    "1710000000.000100",
+		MessageID:   "1710000000.000100",
+		UserID:      "U123",
+		MessageText: "prior request",
+	}
+	if err := store.RecordInbound(event); err != nil {
+		t.Fatalf("RecordInbound() error = %v", err)
+	}
+
+	service := NewGateway(Config{
+		EventLogPath:                  filepath.Join(t.TempDir(), "events.jsonl"),
+		BotUserID:                     "U999",
+		Messenger:                     &captureMessenger{},
+		MemoryEnabled:                 true,
+		MemoryRoot:                    memoryRoot,
+		MemoryIncludeThreadTranscript: false,
+		Agent:                         AgentConfig{Enabled: false},
+		DesktopQueueRoot:              t.TempDir(),
+	})
+
+	current := event
+	current.MessageID = "1710000000.000200"
+	current.MessageText = "current request"
+	contextText, err := service.cfg.Agent.ContextProvider.PromptContext(current)
+	if err != nil {
+		t.Fatalf("PromptContext() error = %v", err)
+	}
+	if strings.Contains(contextText, "recent thread transcript") || strings.Contains(contextText, "prior request") {
+		t.Fatalf("context text = %q", contextText)
 	}
 }
 

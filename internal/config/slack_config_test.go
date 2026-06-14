@@ -23,6 +23,9 @@ func TestSlackConfigDefaultsAndEnvBindings(t *testing.T) {
 	t.Setenv("SLACK_MEMORY_ENABLED", "true")
 	t.Setenv("SLACK_MEMORY_ROOT", "custom/slack-memory")
 	t.Setenv("SLACK_MEMORY_MAX_SECTION_CHARS", "1234")
+	t.Setenv("SLACK_MEMORY_INCLUDE_THREAD_TRANSCRIPT", "false")
+	t.Setenv("SLACK_MEMORY_MAX_TRANSCRIPT_CHARS", "4321")
+	t.Setenv("SLACK_MEMORY_MAX_TRANSCRIPT_RECORDS", "12")
 
 	if err := Init(); err != nil {
 		t.Fatalf("Init() error = %v", err)
@@ -64,6 +67,15 @@ func TestSlackConfigDefaultsAndEnvBindings(t *testing.T) {
 	if got := GetSlackMemoryMaxSectionChars(); got != 1234 {
 		t.Fatalf("GetSlackMemoryMaxSectionChars() = %d", got)
 	}
+	if GetSlackMemoryIncludeThreadTranscript() {
+		t.Fatalf("GetSlackMemoryIncludeThreadTranscript() = true")
+	}
+	if got := GetSlackMemoryMaxTranscriptChars(); got != 4321 {
+		t.Fatalf("GetSlackMemoryMaxTranscriptChars() = %d", got)
+	}
+	if got := GetSlackMemoryMaxTranscriptRecords(); got != 12 {
+		t.Fatalf("GetSlackMemoryMaxTranscriptRecords() = %d", got)
+	}
 }
 
 func TestSlackConfigDefaultsUseSlackStateDir(t *testing.T) {
@@ -96,6 +108,15 @@ func TestSlackConfigDefaultsUseSlackStateDir(t *testing.T) {
 	if got := GetSlackMemoryMaxSectionChars(); got != 2000 {
 		t.Fatalf("GetSlackMemoryMaxSectionChars() = %d", got)
 	}
+	if !GetSlackMemoryIncludeThreadTranscript() {
+		t.Fatalf("GetSlackMemoryIncludeThreadTranscript() = false")
+	}
+	if got := GetSlackMemoryMaxTranscriptChars(); got != 8000 {
+		t.Fatalf("GetSlackMemoryMaxTranscriptChars() = %d", got)
+	}
+	if got := GetSlackMemoryMaxTranscriptRecords(); got != 30 {
+		t.Fatalf("GetSlackMemoryMaxTranscriptRecords() = %d", got)
+	}
 	if got := GetSlackAgentResultMaxChars(); got != 3500 {
 		t.Fatalf("GetSlackAgentResultMaxChars() = %d", got)
 	}
@@ -104,11 +125,13 @@ func TestSlackConfigDefaultsUseSlackStateDir(t *testing.T) {
 	}
 }
 
-func TestSlackMemoryMaxSectionCharsFallback(t *testing.T) {
+func TestSlackMemoryLimitFallbacks(t *testing.T) {
 	viper.Reset()
 	tmp := t.TempDir()
 	t.Setenv("LARK_CONFIG_DIR", filepath.Join(tmp, ".lark"))
 	t.Setenv("SLACK_MEMORY_MAX_SECTION_CHARS", "0")
+	t.Setenv("SLACK_MEMORY_MAX_TRANSCRIPT_CHARS", "0")
+	t.Setenv("SLACK_MEMORY_MAX_TRANSCRIPT_RECORDS", "-1")
 
 	if err := Init(); err != nil {
 		t.Fatalf("Init() error = %v", err)
@@ -116,5 +139,11 @@ func TestSlackMemoryMaxSectionCharsFallback(t *testing.T) {
 
 	if got := GetSlackMemoryMaxSectionChars(); got != 2000 {
 		t.Fatalf("GetSlackMemoryMaxSectionChars() = %d", got)
+	}
+	if got := GetSlackMemoryMaxTranscriptChars(); got != 8000 {
+		t.Fatalf("GetSlackMemoryMaxTranscriptChars() = %d", got)
+	}
+	if got := GetSlackMemoryMaxTranscriptRecords(); got != 30 {
+		t.Fatalf("GetSlackMemoryMaxTranscriptRecords() = %d", got)
 	}
 }

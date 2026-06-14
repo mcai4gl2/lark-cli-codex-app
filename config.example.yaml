@@ -57,6 +57,12 @@ slack:
     root: ".slack/conversations"
     # Maximum characters loaded from each memory file into Codex prompts.
     max_section_chars: 2000
+    # Include recent thread conversation records in Codex prompts.
+    include_thread_transcript: true
+    # Maximum characters loaded from recent thread transcript records.
+    max_transcript_chars: 8000
+    # Maximum recent thread records loaded into Codex prompts.
+    max_transcript_records: 30
   agent:
     enabled: false
     codex_binary: "codex"

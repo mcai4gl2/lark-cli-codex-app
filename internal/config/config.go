@@ -45,9 +45,12 @@ type Config struct {
 			ProcessingReaction string `mapstructure:"processing_reaction"`
 		} `mapstructure:"gateway"`
 		Memory struct {
-			Enabled         bool   `mapstructure:"enabled"`
-			Root            string `mapstructure:"root"`
-			MaxSectionChars int    `mapstructure:"max_section_chars"`
+			Enabled                 bool   `mapstructure:"enabled"`
+			Root                    string `mapstructure:"root"`
+			MaxSectionChars         int    `mapstructure:"max_section_chars"`
+			IncludeThreadTranscript bool   `mapstructure:"include_thread_transcript"`
+			MaxTranscriptChars      int    `mapstructure:"max_transcript_chars"`
+			MaxTranscriptRecords    int    `mapstructure:"max_transcript_records"`
 		} `mapstructure:"memory"`
 		Agent struct {
 			Enabled        bool   `mapstructure:"enabled"`
@@ -121,6 +124,9 @@ func Init() error {
 	viper.SetDefault("slack.memory.enabled", false)
 	viper.SetDefault("slack.memory.root", filepath.Join(rootDir, ".slack", "conversations"))
 	viper.SetDefault("slack.memory.max_section_chars", 2000)
+	viper.SetDefault("slack.memory.include_thread_transcript", true)
+	viper.SetDefault("slack.memory.max_transcript_chars", 8000)
+	viper.SetDefault("slack.memory.max_transcript_records", 30)
 	viper.SetDefault("slack.agent.enabled", false)
 	viper.SetDefault("slack.agent.codex_binary", "codex")
 	viper.SetDefault("slack.agent.ack_text", "")
@@ -160,6 +166,9 @@ func Init() error {
 	viper.BindEnv("slack.memory.enabled", "SLACK_MEMORY_ENABLED")
 	viper.BindEnv("slack.memory.root", "SLACK_MEMORY_ROOT")
 	viper.BindEnv("slack.memory.max_section_chars", "SLACK_MEMORY_MAX_SECTION_CHARS")
+	viper.BindEnv("slack.memory.include_thread_transcript", "SLACK_MEMORY_INCLUDE_THREAD_TRANSCRIPT")
+	viper.BindEnv("slack.memory.max_transcript_chars", "SLACK_MEMORY_MAX_TRANSCRIPT_CHARS")
+	viper.BindEnv("slack.memory.max_transcript_records", "SLACK_MEMORY_MAX_TRANSCRIPT_RECORDS")
 	viper.BindEnv("webhook.listen_addr", "LARK_WEBHOOK_LISTEN")
 	viper.BindEnv("webhook.path", "LARK_WEBHOOK_PATH")
 	viper.BindEnv("webhook.verification_token", "LARK_WEBHOOK_TOKEN")
@@ -369,6 +378,29 @@ func GetSlackMemoryMaxSectionChars() int {
 		return 2000
 	}
 	return maxChars
+}
+
+// GetSlackMemoryIncludeThreadTranscript returns whether recent thread transcript context is injected.
+func GetSlackMemoryIncludeThreadTranscript() bool {
+	return viper.GetBool("slack.memory.include_thread_transcript")
+}
+
+// GetSlackMemoryMaxTranscriptChars returns the recent transcript prompt context limit.
+func GetSlackMemoryMaxTranscriptChars() int {
+	maxChars := viper.GetInt("slack.memory.max_transcript_chars")
+	if maxChars <= 0 {
+		return 8000
+	}
+	return maxChars
+}
+
+// GetSlackMemoryMaxTranscriptRecords returns the recent transcript record limit.
+func GetSlackMemoryMaxTranscriptRecords() int {
+	maxRecords := viper.GetInt("slack.memory.max_transcript_records")
+	if maxRecords <= 0 {
+		return 30
+	}
+	return maxRecords
 }
 
 // GetSlackAgentEnabled returns whether Slack messages should dispatch to Codex.
