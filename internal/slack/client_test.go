@@ -95,9 +95,13 @@ func TestClientHistoryCallsConversationsHistory(t *testing.T) {
 		if r.URL.Path != "/conversations.history" {
 			t.Fatalf("path = %s", r.URL.Path)
 		}
-		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
-			t.Fatalf("decode body: %v", err)
+		if r.Method != http.MethodGet {
+			t.Fatalf("method = %s", r.Method)
 		}
+		got.Channel = r.URL.Query().Get("channel")
+		got.Limit, _ = strconv.Atoi(r.URL.Query().Get("limit"))
+		got.Oldest = r.URL.Query().Get("oldest")
+		got.Latest = r.URL.Query().Get("latest")
 		_, _ = w.Write([]byte(`{"ok":true,"messages":[{"type":"message","user":"U123","text":"hello","ts":"111.222","thread_ts":"111.222"}],"has_more":false}`))
 	}))
 	defer server.Close()
@@ -131,9 +135,12 @@ func TestClientThreadCallsConversationsReplies(t *testing.T) {
 		if r.URL.Path != "/conversations.replies" {
 			t.Fatalf("path = %s", r.URL.Path)
 		}
-		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
-			t.Fatalf("decode body: %v", err)
+		if r.Method != http.MethodGet {
+			t.Fatalf("method = %s", r.Method)
 		}
+		got.Channel = r.URL.Query().Get("channel")
+		got.TS = r.URL.Query().Get("ts")
+		got.Limit, _ = strconv.Atoi(r.URL.Query().Get("limit"))
 		_, _ = w.Write([]byte(`{"ok":true,"messages":[{"type":"message","user":"U123","text":"root","ts":"111.222"},{"type":"message","user":"U456","text":"reply","ts":"111.333","thread_ts":"111.222"}],"has_more":false}`))
 	}))
 	defer server.Close()
@@ -171,9 +178,14 @@ func TestClientThreadIncludesOldestAndLatest(t *testing.T) {
 		if r.URL.Path != "/conversations.replies" {
 			t.Fatalf("path = %s", r.URL.Path)
 		}
-		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
-			t.Fatalf("decode body: %v", err)
+		if r.Method != http.MethodGet {
+			t.Fatalf("method = %s", r.Method)
 		}
+		got.Channel = r.URL.Query().Get("channel")
+		got.TS = r.URL.Query().Get("ts")
+		got.Limit, _ = strconv.Atoi(r.URL.Query().Get("limit"))
+		got.Oldest = r.URL.Query().Get("oldest")
+		got.Latest = r.URL.Query().Get("latest")
 		_, _ = w.Write([]byte(`{"ok":true,"messages":[{"type":"message","user":"U123","text":"root","ts":"111.222"}],"has_more":false}`))
 	}))
 	defer server.Close()

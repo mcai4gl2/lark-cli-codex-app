@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -240,9 +241,13 @@ func TestGatewayCatchUpProcessesParticipatingThreadMessages(t *testing.T) {
 		if r.URL.Path != "/conversations.replies" {
 			t.Fatalf("unexpected API path = %s", r.URL.Path)
 		}
-		if err := json.NewDecoder(r.Body).Decode(&gotRequest); err != nil {
-			t.Fatalf("decode body: %v", err)
+		if r.Method != http.MethodGet {
+			t.Fatalf("method = %s", r.Method)
 		}
+		gotRequest.Channel = r.URL.Query().Get("channel")
+		gotRequest.TS = r.URL.Query().Get("ts")
+		gotRequest.Limit, _ = strconv.Atoi(r.URL.Query().Get("limit"))
+		gotRequest.Oldest = r.URL.Query().Get("oldest")
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"ok": true,

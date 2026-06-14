@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -168,17 +170,15 @@ func (c *Client) History(ctx context.Context, opts HistoryOptions) (MessageList,
 		return MessageList{}, fmt.Errorf("slack channel is required")
 	}
 
-	payload := map[string]interface{}{
-		"channel": channel,
-	}
+	params := url.Values{"channel": []string{channel}}
 	if opts.Limit > 0 {
-		payload["limit"] = opts.Limit
+		params.Set("limit", strconv.Itoa(opts.Limit))
 	}
 	if strings.TrimSpace(opts.Oldest) != "" {
-		payload["oldest"] = strings.TrimSpace(opts.Oldest)
+		params.Set("oldest", strings.TrimSpace(opts.Oldest))
 	}
 	if strings.TrimSpace(opts.Latest) != "" {
-		payload["latest"] = strings.TrimSpace(opts.Latest)
+		params.Set("latest", strings.TrimSpace(opts.Latest))
 	}
 
 	var response struct {
@@ -186,7 +186,7 @@ func (c *Client) History(ctx context.Context, opts HistoryOptions) (MessageList,
 		Messages []Message `json:"messages"`
 		HasMore  bool      `json:"has_more"`
 	}
-	if err := c.call(ctx, "conversations.history", payload, &response); err != nil {
+	if err := c.callGet(ctx, "conversations.history", params, &response); err != nil {
 		return MessageList{}, err
 	}
 	if !response.OK {
@@ -212,18 +212,18 @@ func (c *Client) Thread(ctx context.Context, opts ThreadOptions) (MessageList, e
 		return MessageList{}, fmt.Errorf("slack thread timestamp is required")
 	}
 
-	payload := map[string]interface{}{
-		"channel": channel,
-		"ts":      threadTS,
+	params := url.Values{
+		"channel": []string{channel},
+		"ts":      []string{threadTS},
 	}
 	if opts.Limit > 0 {
-		payload["limit"] = opts.Limit
+		params.Set("limit", strconv.Itoa(opts.Limit))
 	}
 	if strings.TrimSpace(opts.Oldest) != "" {
-		payload["oldest"] = strings.TrimSpace(opts.Oldest)
+		params.Set("oldest", strings.TrimSpace(opts.Oldest))
 	}
 	if strings.TrimSpace(opts.Latest) != "" {
-		payload["latest"] = strings.TrimSpace(opts.Latest)
+		params.Set("latest", strings.TrimSpace(opts.Latest))
 	}
 
 	var response struct {
@@ -231,7 +231,7 @@ func (c *Client) Thread(ctx context.Context, opts ThreadOptions) (MessageList, e
 		Messages []Message `json:"messages"`
 		HasMore  bool      `json:"has_more"`
 	}
-	if err := c.call(ctx, "conversations.replies", payload, &response); err != nil {
+	if err := c.callGet(ctx, "conversations.replies", params, &response); err != nil {
 		return MessageList{}, err
 	}
 	if !response.OK {
@@ -407,6 +407,44 @@ func (c *Client) call(ctx context.Context, method string, payload interface{}, o
 		return fmt.Errorf("SLACK_BOT_TOKEN is required")
 	}
 	return c.callWithToken(ctx, method, payload, out, c.botToken)
+}
+
+func (c *Client) callGet(ctx context.Context, method string, params url.Values, out interface{}) error {
+	if c.botToken == "" {
+		return fmt.Errorf("SLACK_BOT_TOKEN is required")
+	}
+	return c.callGetWithToken(ctx, method, params, out, c.botToken)
+}
+
+func (c *Client) callGetWithToken(ctx context.Context, method string, params url.Values, out interface{}, token string) error {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return fmt.Errorf("slack token is required")
+	}
+	reqURL := c.baseURL + "/" + method
+	if len(params) > 0 {
+		reqURL += "?" + params.Encode()
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return fmt.Errorf("build slack request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("call slack %s: %w", method, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("slack %s returned HTTP %d", method, resp.StatusCode)
+	}
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("decode slack %s response: %w", method, err)
+	}
+	return nil
 }
 
 func (c *Client) callWithToken(ctx context.Context, method string, payload interface{}, out interface{}, token string) error {
