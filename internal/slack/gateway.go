@@ -18,6 +18,7 @@ import (
 	"github.com/yjwong/lark-cli/internal/inbound"
 	"github.com/yjwong/lark-cli/internal/platform"
 	"github.com/yjwong/lark-cli/internal/slackmemory"
+	"github.com/yjwong/lark-cli/internal/summarizer"
 )
 
 // AgentConfig aliases the shared Codex agent config for Slack gateway callers.
@@ -42,6 +43,8 @@ type Config struct {
 	RecoverMode                   RecoverMode
 	RecoveryPollInterval          time.Duration
 	ProcessingReactionName        string
+	LocalSummarizer               *summarizer.Client
+	LocalSummarizerMinChars       int
 	Messenger                     platform.Messenger
 	APIBaseURL                    string
 }
@@ -93,6 +96,8 @@ func NewGateway(cfg Config) *Gateway {
 			includeThreadTranscript: cfg.MemoryIncludeThreadTranscript,
 			maxTranscriptChars:      cfg.MemoryMaxTranscriptChars,
 			maxTranscriptRecords:    cfg.MemoryMaxTranscriptRecords,
+			summarizer:              cfg.LocalSummarizer,
+			summarizeMinChars:       cfg.LocalSummarizerMinChars,
 		}
 		cfg.Agent.ReplyObserver = memoryReplyObserver{store: memoryStore}
 	}
@@ -530,6 +535,8 @@ type memoryPromptProvider struct {
 	includeThreadTranscript bool
 	maxTranscriptChars      int
 	maxTranscriptRecords    int
+	summarizer              slackmemory.Summarizer
+	summarizeMinChars       int
 }
 
 func (p memoryPromptProvider) PromptContext(entry inbound.LoggedEvent) (string, error) {
@@ -538,6 +545,8 @@ func (p memoryPromptProvider) PromptContext(entry inbound.LoggedEvent) (string, 
 		IncludeThreadTranscript: p.includeThreadTranscript,
 		MaxTranscriptChars:      p.maxTranscriptChars,
 		MaxTranscriptRecords:    p.maxTranscriptRecords,
+		Summarizer:              p.summarizer,
+		SummarizeMinChars:       p.summarizeMinChars,
 	})
 }
 
