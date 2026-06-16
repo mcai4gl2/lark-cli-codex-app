@@ -71,6 +71,19 @@ slack:
     max_transcript_chars: 8000
     # Maximum recent thread records loaded into agent prompts.
     max_transcript_records: 30
+  local_summarizer:
+    # Enable summarization of long outbound (LLM reply) records in thread transcripts.
+    # Requires a running local-summarizer service (Gemma 3 1B via llama.cpp).
+    enabled: false
+    # Base URL of the local summarizer gateway.
+    url: "http://localhost:8080"
+    # Maximum tokens for each summary response (kept small for a 1B model).
+    max_tokens: 128
+    # HTTP timeout for each summarization call in seconds.
+    timeout_seconds: 30
+    # Only summarize outbound records longer than this many characters.
+    # Short replies are passed through unchanged.
+    min_chars: 300
   agent:
     enabled: false
     # Agent backend: codex or agy. Defaults to codex.
