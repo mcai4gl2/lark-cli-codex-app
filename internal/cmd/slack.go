@@ -13,6 +13,7 @@ import (
 	"github.com/yjwong/lark-cli/internal/platform"
 	slackgateway "github.com/yjwong/lark-cli/internal/slack"
 	"github.com/yjwong/lark-cli/internal/slackmemory"
+	"github.com/yjwong/lark-cli/internal/summarizer"
 )
 
 var slackCmd = &cobra.Command{
@@ -130,6 +131,18 @@ Examples:
 			agentCfg.Workspace = strings.TrimSpace(slackGatewayAgentWorkspace)
 		}
 
+		var localSummarizer *summarizer.Client
+		if config.GetSlackLocalSummarizerEnabled() {
+			url := config.GetSlackLocalSummarizerURL()
+			if strings.TrimSpace(url) != "" {
+				localSummarizer = summarizer.NewClient(summarizer.Config{
+					URL:            url,
+					MaxTokens:      config.GetSlackLocalSummarizerMaxTokens(),
+					TimeoutSeconds: config.GetSlackLocalSummarizerTimeoutSeconds(),
+				})
+			}
+		}
+
 		cfg := slackgateway.Config{
 			AppToken:                      config.GetSlackAppToken(),
 			BotToken:                      config.GetSlackBotToken(),
@@ -147,6 +160,8 @@ Examples:
 			MemoryMaxTranscriptRecords:    config.GetSlackMemoryMaxTranscriptRecords(),
 			RecoverMode:                   slackgateway.NormalizeRecoverMode(config.GetSlackGatewayRecoverMode()),
 			ProcessingReactionName:        config.GetSlackGatewayProcessingReaction(),
+			LocalSummarizer:               localSummarizer,
+			LocalSummarizerMinChars:       config.GetSlackLocalSummarizerMinChars(),
 		}
 		if cfg.EventLogPath == "" {
 			cfg.EventLogPath = config.GetSlackGatewayEventLogPath()
@@ -189,6 +204,9 @@ Examples:
 			"memory_transcript_max_records": cfg.MemoryMaxTranscriptRecords,
 			"recover_mode":                  cfg.RecoverMode,
 			"processing_reaction":           cfg.ProcessingReactionName,
+			"local_summarizer_enabled":      localSummarizer != nil,
+			"local_summarizer_url":          config.GetSlackLocalSummarizerURL(),
+			"local_summarizer_min_chars":    config.GetSlackLocalSummarizerMinChars(),
 			"public_https_required":         false,
 		})
 
