@@ -1,6 +1,7 @@
 package slackmemory
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -11,11 +12,18 @@ const defaultMaxSectionChars = 2000
 const defaultMaxTranscriptChars = 8000
 const defaultMaxTranscriptRecords = 30
 
+// Summarizer compresses text. The local Gemma model client satisfies this interface.
+type Summarizer interface {
+	Summarize(ctx context.Context, text string) (string, error)
+}
+
 type ContextOptions struct {
 	MaxSectionChars         int
 	IncludeThreadTranscript bool
 	MaxTranscriptChars      int
 	MaxTranscriptRecords    int
+	Summarizer              Summarizer
+	SummarizeMinChars       int
 }
 
 func BuildPromptContext(store *Store, event platform.MessageEvent, opts ContextOptions) (string, error) {
@@ -51,8 +59,10 @@ func BuildPromptContext(store *Store, event platform.MessageEvent, opts ContextO
 
 	if opts.IncludeThreadTranscript {
 		transcript, err := BuildRecentTranscript(store, event, TranscriptOptions{
-			MaxChars:   opts.MaxTranscriptChars,
-			MaxRecords: opts.MaxTranscriptRecords,
+			MaxChars:          opts.MaxTranscriptChars,
+			MaxRecords:        opts.MaxTranscriptRecords,
+			Summarizer:        opts.Summarizer,
+			SummarizeMinChars: opts.SummarizeMinChars,
 		})
 		if err != nil {
 			return "", fmt.Errorf("build Slack recent thread transcript: %w", err)
@@ -66,8 +76,10 @@ func BuildPromptContext(store *Store, event platform.MessageEvent, opts ContextO
 }
 
 type TranscriptOptions struct {
-	MaxChars   int
-	MaxRecords int
+	MaxChars          int
+	MaxRecords        int
+	Summarizer        Summarizer
+	SummarizeMinChars int
 }
 
 func BuildRecentTranscript(store *Store, event platform.MessageEvent, opts TranscriptOptions) (string, error) {
@@ -98,6 +110,19 @@ func BuildRecentTranscript(store *Store, event platform.MessageEvent, opts Trans
 			continue
 		}
 		rendered := renderTranscriptRecord(record)
+		if opts.Summarizer != nil && record.Direction == directionOutbound {
+			minChars := opts.SummarizeMinChars
+			if minChars <= 0 {
+				minChars = 300
+			}
+			if len([]rune(record.Text)) > minChars {
+				if summary, err := opts.Summarizer.Summarize(context.Background(), record.Text); err == nil && strings.TrimSpace(summary) != "" {
+					summarizedRecord := record
+					summarizedRecord.Text = "[Summary] " + summary
+					rendered = renderTranscriptRecord(summarizedRecord)
+				}
+			}
+		}
 		if strings.TrimSpace(rendered) == "" {
 			continue
 		}
