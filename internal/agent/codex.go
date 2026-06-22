@@ -1,8 +1,11 @@
 package agent
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -42,6 +45,8 @@ type Config struct {
 	ContextProvider    PromptContextProvider
 	ReplyObserver      ReplyObserver
 	ProcessingObserver ProcessingObserver
+	SessionResume      bool
+	SessionStore       *SessionStore
 }
 
 type Runner struct {
@@ -134,16 +139,22 @@ func (r *Runner) execute(entry inbound.LoggedEvent) (string, error) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	promptContext := ""
-	if r.cfg.ContextProvider != nil {
-		contextText, err := r.cfg.ContextProvider.PromptContext(entry)
-		if err != nil {
-			r.logger.Printf("failed to load prompt context for message_id=%s: %v", entry.MessageID, err)
+	sessionID := ""
+	if r.cfg.SessionResume && r.cfg.SessionStore != nil {
+		key := sessionKeyFromEntry(entry)
+		if id, lookupErr := r.cfg.SessionStore.Lookup(key); lookupErr == nil {
+			sessionID = id
 		} else {
-			promptContext = contextText
+			r.logger.Printf("session lookup failed for message_id=%s: %v", entry.MessageID, lookupErr)
 		}
 	}
-	prompt := buildPromptWithContext(entry, r.cfg.ResultMaxChars, backendLabel(backend.Name()), promptContext)
+
+	var prompt string
+	if sessionID != "" {
+		prompt = entry.MessageText
+	} else {
+		prompt = r.buildFullPrompt(entry, backend)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), r.cfg.Timeout)
 	defer cancel()
@@ -157,7 +168,28 @@ func (r *Runner) execute(entry inbound.LoggedEvent) (string, error) {
 		Args:           splitArgs(r.cfg.Args),
 		ResultMaxChars: r.cfg.ResultMaxChars,
 		TempDir:        tempDir,
+		SessionID:      sessionID,
 	})
+
+	if err != nil && sessionID != "" {
+		r.logger.Printf("session resume failed for %s, falling back to new session: %v", sessionID, err)
+		if r.cfg.SessionStore != nil {
+			r.cfg.SessionStore.Remove(sessionKeyFromEntry(entry))
+		}
+		prompt = r.buildFullPrompt(entry, backend)
+		result, err = backend.Execute(ctx, BackendRequest{
+			Entry:          entry,
+			Prompt:         prompt,
+			Workspace:      r.cfg.Workspace,
+			Model:          r.cfg.Model,
+			Binary:         resolveBackendBinary(r.cfg, backend),
+			Args:           splitArgs(r.cfg.Args),
+			ResultMaxChars: r.cfg.ResultMaxChars,
+			TempDir:        tempDir,
+			SessionID:      "",
+		})
+	}
+
 	if ctx.Err() == context.DeadlineExceeded {
 		return "", fmt.Errorf("任务超时，超过 %s", r.cfg.Timeout)
 	}
@@ -165,7 +197,38 @@ func (r *Runner) execute(entry inbound.LoggedEvent) (string, error) {
 		return "", err
 	}
 
-	return trimForChat(result, r.cfg.ResultMaxChars), nil
+	if result.SessionID != "" && r.cfg.SessionResume && r.cfg.SessionStore != nil {
+		if putErr := r.cfg.SessionStore.Put(sessionKeyFromEntry(entry), result.SessionID); putErr != nil {
+			r.logger.Printf("failed to store session for message_id=%s: %v", entry.MessageID, putErr)
+		}
+	}
+
+	return trimForChat(result.Text, r.cfg.ResultMaxChars), nil
+}
+
+func (r *Runner) buildFullPrompt(entry inbound.LoggedEvent, backend Backend) string {
+	promptContext := ""
+	if r.cfg.ContextProvider != nil {
+		contextText, err := r.cfg.ContextProvider.PromptContext(entry)
+		if err != nil {
+			r.logger.Printf("failed to load prompt context for message_id=%s: %v", entry.MessageID, err)
+		} else {
+			promptContext = contextText
+		}
+	}
+	return buildPromptWithContext(entry, r.cfg.ResultMaxChars, backendLabel(backend.Name()), promptContext)
+}
+
+func sessionKeyFromEntry(entry inbound.LoggedEvent) SessionKey {
+	threadTS := strings.TrimSpace(entry.ThreadID)
+	if threadTS == "" {
+		threadTS = strings.TrimSpace(entry.MessageID)
+	}
+	return SessionKey{
+		Provider:  entry.Provider,
+		ChannelID: entry.ChannelID,
+		ThreadTS:  threadTS,
+	}
 }
 
 type CodexBackend struct{}
@@ -174,43 +237,93 @@ func (CodexBackend) Name() string { return "codex" }
 
 func (CodexBackend) DefaultBinary() string { return "codex" }
 
-func (CodexBackend) Execute(ctx context.Context, req BackendRequest) (string, error) {
+type codexJSONEvent struct {
+	Type     string `json:"type"`
+	ThreadID string `json:"thread_id,omitempty"`
+}
+
+func (CodexBackend) Execute(ctx context.Context, req BackendRequest) (BackendResult, error) {
 	outputFile := filepath.Join(req.TempDir, "last-message.txt")
-	args := []string{
-		"-a", "never",
-		"-s", "workspace-write",
-		"exec",
-		"-C", req.Workspace,
-		"--skip-git-repo-check",
-		"--output-last-message", outputFile,
-	}
+
+	var args []string
 	if strings.TrimSpace(req.Model) != "" {
-		args = append([]string{"-m", strings.TrimSpace(req.Model)}, args...)
+		args = append(args, "-m", strings.TrimSpace(req.Model))
 	}
-	args = append(args, splitArgs(req.Args)...)
-	args = append(args, req.Prompt)
+	args = append(args, "-a", "never", "-s", "workspace-write", "exec")
+
+	if strings.TrimSpace(req.SessionID) != "" {
+		args = append(args, "resume",
+			"--json",
+			"--skip-git-repo-check",
+			"--output-last-message", outputFile,
+		)
+		args = append(args, splitArgs(req.Args)...)
+		args = append(args, req.SessionID, req.Prompt)
+	} else {
+		args = append(args,
+			"--json",
+			"-C", req.Workspace,
+			"--skip-git-repo-check",
+			"--output-last-message", outputFile,
+		)
+		args = append(args, splitArgs(req.Args)...)
+		args = append(args, req.Prompt)
+	}
 
 	cmd := exec.CommandContext(ctx, req.Binary, args...)
-	output, err := cmd.CombinedOutput()
+
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		msg := strings.TrimSpace(string(output))
+		return BackendResult{}, fmt.Errorf("stdout pipe: %w", err)
+	}
+
+	var stderrBuf strings.Builder
+	cmd.Stderr = &stderrBuf
+
+	if err := cmd.Start(); err != nil {
+		return BackendResult{}, fmt.Errorf("start codex: %w", err)
+	}
+
+	threadID := parseThreadID(stdout)
+
+	if err := cmd.Wait(); err != nil {
+		msg := strings.TrimSpace(stderrBuf.String())
 		if msg == "" {
 			msg = err.Error()
 		}
-		return "", fmt.Errorf("%s", trimForChat(msg, req.ResultMaxChars))
+		return BackendResult{}, fmt.Errorf("%s", trimForChat(msg, req.ResultMaxChars))
 	}
 
 	data, err := os.ReadFile(outputFile)
 	if err != nil {
-		return "", fmt.Errorf("读取 Codex 输出失败: %w", err)
+		return BackendResult{}, fmt.Errorf("读取 Codex 输出失败: %w", err)
 	}
 
 	result := strings.TrimSpace(string(data))
 	if result == "" {
-		return "", fmt.Errorf("Codex 没有返回结果")
+		return BackendResult{}, fmt.Errorf("Codex 没有返回结果")
 	}
 
-	return trimForChat(result, req.ResultMaxChars), nil
+	return BackendResult{
+		Text:      trimForChat(result, req.ResultMaxChars),
+		SessionID: threadID,
+	}, nil
+}
+
+func parseThreadID(r io.Reader) string {
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		var event codexJSONEvent
+		if json.Unmarshal(line, &event) != nil {
+			continue
+		}
+		if event.Type == "thread.started" && strings.TrimSpace(event.ThreadID) != "" {
+			io.Copy(io.Discard, r)
+			return strings.TrimSpace(event.ThreadID)
+		}
+	}
+	return ""
 }
 
 func (r *Runner) reply(entry inbound.LoggedEvent, text string) error {

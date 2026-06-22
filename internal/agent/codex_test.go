@@ -190,8 +190,8 @@ func (b testBackend) Name() string { return b.name }
 
 func (b testBackend) DefaultBinary() string { return b.defaultBinary }
 
-func (b testBackend) Execute(context.Context, BackendRequest) (string, error) {
-	return "", nil
+func (b testBackend) Execute(context.Context, BackendRequest) (BackendResult, error) {
+	return BackendResult{}, nil
 }
 
 func TestCodexBackendExecuteReturnsLastMessageOutput(t *testing.T) {
@@ -213,8 +213,11 @@ func TestCodexBackendExecuteReturnsLastMessageOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if result != "codex final output" {
-		t.Fatalf("result = %q", result)
+	if result.Text != "codex final output" {
+		t.Fatalf("result.Text = %q", result.Text)
+	}
+	if result.SessionID != "test-session-001" {
+		t.Fatalf("result.SessionID = %q, want test-session-001", result.SessionID)
 	}
 }
 
@@ -555,6 +558,7 @@ if [ -z "$output" ]; then
 	echo "missing output file" >&2
 	exit 2
 fi
+echo '{"type":"thread.started","thread_id":"test-session-001"}'
 printf '%s' "codex final output" > "$output"
 `
 	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
@@ -574,4 +578,234 @@ exit 7
 		t.Fatalf("WriteFile(failing codex): %v", err)
 	}
 	return path
+}
+
+func fakeCodexResumeExecutable(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "fake-codex-resume")
+	script := `#!/bin/sh
+capture="${FAKE_CODEX_CAPTURE_PROMPT:-}"
+output=""
+prev=""
+is_resume=""
+for arg in "$@"; do
+	if [ "$prev" = "--output-last-message" ]; then
+		output="$arg"
+	fi
+	if [ "$arg" = "resume" ]; then
+		is_resume="yes"
+	fi
+	prev="$arg"
+done
+prompt="${arg}"
+if [ -n "$capture" ]; then
+	printf '%s' "$prompt" > "$capture"
+fi
+if [ -z "$output" ]; then
+	echo "missing output file" >&2
+	exit 2
+fi
+echo '{"type":"thread.started","thread_id":"test-session-001"}'
+if [ "$is_resume" = "yes" ]; then
+	printf '%s' "resumed output" > "$output"
+else
+	printf '%s' "new session output" > "$output"
+fi
+`
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatalf("WriteFile(fake codex resume): %v", err)
+	}
+	return path
+}
+
+func TestCodexBackendResumePassesSessionID(t *testing.T) {
+	tempDir := t.TempDir()
+	backend := CodexBackend{}
+	result, err := backend.Execute(context.Background(), BackendRequest{
+		Entry: inbound.LoggedEvent{
+			Provider:    "slack",
+			ChannelID:   "C123",
+			MessageID:   "1712345678.000100",
+			MessageText: "follow up",
+		},
+		Prompt:         "follow up",
+		Workspace:      t.TempDir(),
+		Binary:         fakeCodexResumeExecutable(t),
+		ResultMaxChars: 100,
+		TempDir:        tempDir,
+		SessionID:      "existing-session-id",
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Text != "resumed output" {
+		t.Fatalf("result.Text = %q, want 'resumed output'", result.Text)
+	}
+}
+
+func TestRunnerSessionResumeFlow(t *testing.T) {
+	sessionDir := t.TempDir()
+	store := NewSessionStore(filepath.Join(sessionDir, "sessions.json"))
+	binary := fakeCodexResumeExecutable(t)
+	messenger := &fakeMessenger{}
+
+	runner := NewRunnerWithMessenger(Config{
+		Enabled:        true,
+		CodexBinary:    binary,
+		Workspace:      t.TempDir(),
+		ResultMaxChars: 100,
+		Timeout:        5 * time.Second,
+		SessionResume:  true,
+		SessionStore:   store,
+	}, nil, messenger)
+
+	entry := inbound.LoggedEvent{
+		Provider:    "slack",
+		ChannelID:   "C123",
+		ThreadID:    "1712345678.000100",
+		MessageID:   "1712345678.000100",
+		UserID:      "U123",
+		MessageText: "first message",
+	}
+
+	result, err := runner.execute(entry)
+	if err != nil {
+		t.Fatalf("first execute: %v", err)
+	}
+	if result != "new session output" {
+		t.Fatalf("first result = %q, want 'new session output'", result)
+	}
+
+	key := sessionKeyFromEntry(entry)
+	id, _ := store.Lookup(key)
+	if id == "" {
+		t.Fatal("session not stored after first execution")
+	}
+
+	entry2 := inbound.LoggedEvent{
+		Provider:    "slack",
+		ChannelID:   "C123",
+		ThreadID:    "1712345678.000100",
+		MessageID:   "1712345679.000200",
+		UserID:      "U123",
+		MessageText: "follow up",
+	}
+
+	capturePath := filepath.Join(t.TempDir(), "prompt2.txt")
+	t.Setenv("FAKE_CODEX_CAPTURE_PROMPT", capturePath)
+
+	result2, err := runner.execute(entry2)
+	if err != nil {
+		t.Fatalf("second execute: %v", err)
+	}
+	if result2 != "resumed output" {
+		t.Fatalf("second result = %q, want 'resumed output'", result2)
+	}
+
+	promptData, err := os.ReadFile(capturePath)
+	if err != nil {
+		t.Fatalf("ReadFile(capturePath): %v", err)
+	}
+	prompt := string(promptData)
+	if prompt != "follow up" {
+		t.Fatalf("resume prompt = %q, want raw user message 'follow up'", prompt)
+	}
+}
+
+func TestRunnerSessionResumeFallback(t *testing.T) {
+	sessionDir := t.TempDir()
+	store := NewSessionStore(filepath.Join(sessionDir, "sessions.json"))
+	key := SessionKey{Provider: "slack", ChannelID: "C123", ThreadTS: "1712345678.000100"}
+	store.Put(key, "stale-session-id")
+
+	scriptDir := t.TempDir()
+	callCount := filepath.Join(scriptDir, "call-count")
+	os.WriteFile(callCount, []byte("0"), 0o644)
+
+	path := filepath.Join(scriptDir, "fake-codex-fallback")
+	script := `#!/bin/sh
+output=""
+prev=""
+is_resume=""
+for arg in "$@"; do
+	if [ "$prev" = "--output-last-message" ]; then
+		output="$arg"
+	fi
+	if [ "$arg" = "resume" ]; then
+		is_resume="yes"
+	fi
+	prev="$arg"
+done
+count=$(cat "` + callCount + `")
+count=$((count + 1))
+printf '%s' "$count" > "` + callCount + `"
+if [ "$is_resume" = "yes" ]; then
+	echo "resume failed" >&2
+	exit 1
+fi
+echo '{"type":"thread.started","thread_id":"new-session-after-fallback"}'
+printf '%s' "fallback output" > "$output"
+`
+	os.WriteFile(path, []byte(script), 0o755)
+
+	messenger := &fakeMessenger{}
+	runner := NewRunnerWithMessenger(Config{
+		Enabled:        true,
+		CodexBinary:    path,
+		Workspace:      t.TempDir(),
+		ResultMaxChars: 100,
+		Timeout:        5 * time.Second,
+		SessionResume:  true,
+		SessionStore:   store,
+	}, nil, messenger)
+
+	entry := inbound.LoggedEvent{
+		Provider:    "slack",
+		ChannelID:   "C123",
+		ThreadID:    "1712345678.000100",
+		MessageID:   "1712345679.000200",
+		UserID:      "U123",
+		MessageText: "after stale session",
+	}
+
+	result, err := runner.execute(entry)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result != "fallback output" {
+		t.Fatalf("result = %q, want 'fallback output'", result)
+	}
+
+	countData, _ := os.ReadFile(callCount)
+	if string(countData) != "2" {
+		t.Fatalf("call count = %q, want 2 (resume + fallback)", string(countData))
+	}
+
+	id, _ := store.Lookup(key)
+	if id != "new-session-after-fallback" {
+		t.Fatalf("session after fallback = %q, want 'new-session-after-fallback'", id)
+	}
+}
+
+func TestSessionKeyFromEntry(t *testing.T) {
+	entry := inbound.LoggedEvent{
+		Provider:  "slack",
+		ChannelID: "C123",
+		ThreadID:  "1712345678.000100",
+		MessageID: "1712345679.000200",
+	}
+	key := sessionKeyFromEntry(entry)
+	if key.Provider != "slack" || key.ChannelID != "C123" || key.ThreadTS != "1712345678.000100" {
+		t.Fatalf("key = %+v", key)
+	}
+
+	entryNoThread := inbound.LoggedEvent{
+		Provider:  "slack",
+		ChannelID: "C123",
+		MessageID: "1712345679.000200",
+	}
+	key2 := sessionKeyFromEntry(entryNoThread)
+	if key2.ThreadTS != "1712345679.000200" {
+		t.Fatalf("key.ThreadTS = %q, want message_id as fallback", key2.ThreadTS)
+	}
 }

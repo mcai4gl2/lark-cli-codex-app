@@ -1,6 +1,6 @@
 # Long-Running Codex Sessions for Project Mode
 
-Status: **Phase 1 implementation plan, 2026-06-23**
+Status: **Phase 1 implemented, 2026-06-23**
 
 Goal: Replace the fire-and-forget `codex exec` model with persistent Codex sessions that map 1:1 to Slack threads. Each follow-up message in a thread should resume the same Codex session rather than spawning a new process with reconstructed context. This applies to both project mode and chat mode — letting Codex manage its own conversation state instead of our homebrew transcript-replay.
 
@@ -331,6 +331,26 @@ The prompt for a resumed session is just the raw `entry.MessageText` — no wrap
 1. **Unit tests** — SessionStore CRUD, CodexBackend --json parsing, resume command building, fallback on resume failure
 2. **Integration test** — fake-codex script that emits `thread.started` JSONL + writes output file, verifies resume path is used on second call
 3. **Manual test** — real Slack thread with 5+ back-and-forth messages, verify Codex remembers prior turns
+
+### Implementation Status (2026-06-23)
+
+**Phase 1 implemented.** All components from the file change summary above have been coded:
+
+- `SessionStore` follows the same mutex + atomic-rename JSON file pattern as `RecoveryStore`.
+- `Backend` interface changed from `(string, error)` to `(BackendResult, error)` return; `AgyBackend` updated accordingly.
+- `CodexBackend.Execute` now uses `--json` flag, streams stdout via `StdoutPipe()` + `bufio.Scanner` to parse the `thread.started` JSONL event for `thread_id`, and builds `resume` subcommands when `SessionID` is set.
+- `Runner.execute` does session lookup → prompt switching (raw user text for resume, full prompt for new) → fallback on resume failure (clears stale session, retries as new).
+- Gateway wires `SessionStore` creation when `SessionResume` is enabled with a `MemoryRoot`, and cleans up session mappings when threads expire or are closed by tick reaction.
+- Config, CLI, and example config all updated with `session_resume` field, env binding, and getter.
+- Unit tests cover: SessionStore CRUD + persistence + nil-safety, `BackendResult` integration, resume command building, resume flow with session persistence, fallback on stale session, and `sessionKeyFromEntry`.
+
+**Verified** via Docker (`golang:1.24` image):
+- `gofmt` — all modified files pass, no formatting issues.
+- `go test ./internal/agent/...` — 28/28 pass (8 new SessionStore tests, 3 new resume/fallback tests, 17 pre-existing tests updated for `BackendResult`). One additional fix applied: `backend_agy_test.go` needed updating for the `BackendResult` return type.
+- `go test ./...` — all packages pass (agent, cmd, config, desktop, gateway, inbound, slack, slackmemory, summarizer, webhook).
+- `go build -buildvcs=false -ldflags "-s -w" -o ./lark ./cmd/lark` — clean build, no errors.
+
+**Not yet done:** Manual Slack thread test with real Codex sessions.
 
 ---
 

@@ -99,6 +99,9 @@ slack:
     ack_text: "Received. Working on it."
     result_max_chars: 3500
     timeout_minutes: 20
+    # Resume Codex sessions across Slack thread messages instead of starting fresh.
+    # Requires memory to be enabled (for the .state directory).
+    session_resume: false
 
 # Webhook settings for Feishu/Lark event subscriptions (optional)
 webhook:

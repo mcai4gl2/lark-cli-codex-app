@@ -117,6 +117,7 @@ Examples:
 			AckText:        config.GetSlackAgentAckText(),
 			ResultMaxChars: config.GetSlackAgentResultMaxChars(),
 			TimeoutMinutes: config.GetSlackAgentTimeoutMinutes(),
+			SessionResume:  config.GetSlackAgentSessionResume(),
 		})
 		if cmd.Flags().Changed("agent") {
 			agentCfg.Enabled = slackGatewayAgentEnabled
@@ -195,6 +196,7 @@ Examples:
 			"agent_backend":                 cfg.Agent.Backend,
 			"agent_binary":                  cfg.Agent.Binary,
 			"agent_workspace":               cfg.Agent.Workspace,
+			"agent_session_resume":          cfg.Agent.SessionResume,
 			"desktop_worker":                cfg.DesktopWorker,
 			"memory_enabled":                cfg.MemoryEnabled,
 			"memory_root":                   cfg.MemoryRoot,

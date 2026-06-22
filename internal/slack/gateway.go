@@ -101,6 +101,11 @@ func NewGateway(cfg Config) *Gateway {
 		}
 		cfg.Agent.ReplyObserver = memoryReplyObserver{store: memoryStore}
 	}
+	if cfg.Agent.SessionResume && strings.TrimSpace(cfg.MemoryRoot) != "" {
+		cfg.Agent.SessionStore = agent.NewSessionStore(
+			filepath.Join(cfg.MemoryRoot, ".state", "sessions.json"),
+		)
+	}
 	var recovery *RecoveryStore
 	if recoverMode != RecoverModeOff && strings.TrimSpace(cfg.MemoryRoot) != "" {
 		recovery = NewRecoveryStore(filepath.Join(cfg.MemoryRoot, ".state", "recover-state.json"))
@@ -341,6 +346,18 @@ func (g *Gateway) catchUp(ctx context.Context) error {
 	return nil
 }
 
+func (g *Gateway) removeSessionForRecoveryKey(key RecoveryThreadKey) {
+	if g.cfg.Agent.SessionStore == nil {
+		return
+	}
+	sessionKey := agent.SessionKey{
+		Provider:  "slack",
+		ChannelID: key.ChannelID,
+		ThreadTS:  key.ThreadTS,
+	}
+	g.cfg.Agent.SessionStore.Remove(sessionKey)
+}
+
 func (g *Gateway) catchUpThread(ctx context.Context, thread RecoveryThreadRecord) error {
 	key := thread.Key
 	if recoveryThreadExpired(thread, time.Now(), slackRecoveryThreadTTL) {
@@ -349,6 +366,7 @@ func (g *Gateway) catchUpThread(ctx context.Context, thread RecoveryThreadRecord
 			return err
 		}
 		if removed {
+			g.removeSessionForRecoveryKey(key)
 			g.logger.Printf("thread %s last seen at %s older than %s, stop tracking", key.ThreadTS, thread.LastSeenAt, slackRecoveryThreadTTL)
 		}
 		return nil
@@ -369,6 +387,7 @@ func (g *Gateway) catchUpThread(ctx context.Context, thread RecoveryThreadRecord
 			return err
 		}
 		if removed {
+			g.removeSessionForRecoveryKey(key)
 			g.logger.Printf("thread %s, user %s ticked at %s, stop tracking", key.ThreadTS, tickUser, tickedAt)
 		}
 		return nil
@@ -508,6 +527,7 @@ type DefaultAgentConfigInput struct {
 	AckText        string
 	ResultMaxChars int
 	TimeoutMinutes int
+	SessionResume  bool
 }
 
 // DefaultAgentConfig builds the Slack local agent config from environment and config files.
@@ -526,6 +546,7 @@ func DefaultAgentConfig(input DefaultAgentConfigInput) agent.Config {
 		AckText:        input.AckText,
 		ResultMaxChars: input.ResultMaxChars,
 		Timeout:        time.Duration(input.TimeoutMinutes) * time.Minute,
+		SessionResume:  input.SessionResume,
 	}
 }
 

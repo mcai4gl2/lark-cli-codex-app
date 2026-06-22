@@ -13,7 +13,7 @@ func (AgyBackend) Name() string { return "agy" }
 
 func (AgyBackend) DefaultBinary() string { return "agy" }
 
-func (AgyBackend) Execute(ctx context.Context, req BackendRequest) (string, error) {
+func (AgyBackend) Execute(ctx context.Context, req BackendRequest) (BackendResult, error) {
 	args := []string{"--add-dir", req.Workspace, "--prompt", req.Prompt}
 	if strings.TrimSpace(req.Model) != "" {
 		args = append(args, "--model", strings.TrimSpace(req.Model))
@@ -27,10 +27,10 @@ func (AgyBackend) Execute(ctx context.Context, req BackendRequest) (string, erro
 		if text == "" {
 			text = err.Error()
 		}
-		return "", fmt.Errorf("%s", trimForChat(text, req.ResultMaxChars))
+		return BackendResult{}, fmt.Errorf("%s", trimForChat(text, req.ResultMaxChars))
 	}
 	if text == "" {
-		return "", fmt.Errorf("agy did not return output")
+		return BackendResult{}, fmt.Errorf("agy did not return output")
 	}
-	return trimForChat(text, req.ResultMaxChars), nil
+	return BackendResult{Text: trimForChat(text, req.ResultMaxChars)}, nil
 }

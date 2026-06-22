@@ -29,8 +29,8 @@ func TestAgyBackendExecutePassesWorkspacePromptModelAndArgs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if result != "agy final output" {
-		t.Fatalf("result = %q", result)
+	if result.Text != "agy final output" {
+		t.Fatalf("result.Text = %q", result.Text)
 	}
 
 	argsData, err := os.ReadFile(filepath.Join(filepath.Dir(path), "args.txt"))

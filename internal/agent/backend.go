@@ -7,10 +7,15 @@ import (
 	"github.com/yjwong/lark-cli/internal/inbound"
 )
 
+type BackendResult struct {
+	Text      string
+	SessionID string
+}
+
 type Backend interface {
 	Name() string
 	DefaultBinary() string
-	Execute(ctx context.Context, req BackendRequest) (string, error)
+	Execute(ctx context.Context, req BackendRequest) (BackendResult, error)
 }
 
 type BackendRequest struct {
@@ -22,6 +27,7 @@ type BackendRequest struct {
 	Args           []string
 	ResultMaxChars int
 	TempDir        string
+	SessionID      string
 }
 
 func normalizeBackendName(name string) string {

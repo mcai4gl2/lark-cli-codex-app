@@ -31,6 +31,7 @@ type Config struct {
 		AckText        string   `mapstructure:"ack_text"`
 		ResultMaxChars int      `mapstructure:"result_max_chars"`
 		TimeoutMinutes int      `mapstructure:"timeout_minutes"`
+		SessionResume  bool     `mapstructure:"session_resume"`
 	} `mapstructure:"agent"`
 	Gateway struct {
 		EventLog      string `mapstructure:"event_log"`
@@ -73,6 +74,7 @@ type Config struct {
 			AckText        string   `mapstructure:"ack_text"`
 			ResultMaxChars int      `mapstructure:"result_max_chars"`
 			TimeoutMinutes int      `mapstructure:"timeout_minutes"`
+			SessionResume  bool     `mapstructure:"session_resume"`
 		} `mapstructure:"agent"`
 	} `mapstructure:"slack"`
 	Webhook struct {
@@ -133,6 +135,7 @@ func Init() error {
 	viper.SetDefault("agent.ack_text", "收到，开始处理。")
 	viper.SetDefault("agent.result_max_chars", 1800)
 	viper.SetDefault("agent.timeout_minutes", 20)
+	viper.SetDefault("agent.session_resume", false)
 	viper.SetDefault("gateway.event_log", filepath.Join(cfgDir, "gateway-events.jsonl"))
 	viper.SetDefault("slack.gateway.event_log", filepath.Join(rootDir, ".slack", "gateway-events.jsonl"))
 	viper.SetDefault("slack.gateway.recover_mode", "thread")
@@ -156,6 +159,7 @@ func Init() error {
 	viper.SetDefault("slack.agent.ack_text", "")
 	viper.SetDefault("slack.agent.result_max_chars", 3500)
 	viper.SetDefault("slack.agent.timeout_minutes", 20)
+	viper.SetDefault("slack.agent.session_resume", false)
 	viper.SetDefault("webhook.listen_addr", "0.0.0.0:8080")
 	viper.SetDefault("webhook.path", "/webhook/feishu")
 	viper.SetDefault("webhook.event_log", filepath.Join(cfgDir, "webhook-events.jsonl"))
@@ -173,6 +177,7 @@ func Init() error {
 	viper.BindEnv("agent.ack_text", "LARK_AGENT_ACK_TEXT")
 	viper.BindEnv("agent.result_max_chars", "LARK_AGENT_RESULT_MAX_CHARS")
 	viper.BindEnv("agent.timeout_minutes", "LARK_AGENT_TIMEOUT_MINUTES")
+	viper.BindEnv("agent.session_resume", "LARK_AGENT_SESSION_RESUME")
 	viper.BindEnv("gateway.event_log", "LARK_GATEWAY_EVENT_LOG")
 	viper.BindEnv("gateway.auto_reply_text", "LARK_GATEWAY_AUTO_REPLY_TEXT")
 	viper.BindEnv("slack.bot_token", "SLACK_BOT_TOKEN")
@@ -189,6 +194,7 @@ func Init() error {
 	viper.BindEnv("slack.agent.ack_text", "SLACK_AGENT_ACK_TEXT")
 	viper.BindEnv("slack.agent.result_max_chars", "SLACK_AGENT_RESULT_MAX_CHARS")
 	viper.BindEnv("slack.agent.timeout_minutes", "SLACK_AGENT_TIMEOUT_MINUTES")
+	viper.BindEnv("slack.agent.session_resume", "SLACK_AGENT_SESSION_RESUME")
 	viper.BindEnv("slack.gateway.event_log", "SLACK_GATEWAY_EVENT_LOG")
 	viper.BindEnv("slack.gateway.auto_reply_text", "SLACK_GATEWAY_AUTO_REPLY_TEXT")
 	viper.BindEnv("slack.gateway.recover_mode", "SLACK_GATEWAY_RECOVER_MODE")
@@ -545,6 +551,16 @@ func GetSlackAgentResultMaxChars() int {
 // GetSlackAgentTimeoutMinutes returns the maximum runtime for a Slack Codex task.
 func GetSlackAgentTimeoutMinutes() int {
 	return viper.GetInt("slack.agent.timeout_minutes")
+}
+
+// GetAgentSessionResume returns whether Codex session resume is enabled.
+func GetAgentSessionResume() bool {
+	return viper.GetBool("agent.session_resume")
+}
+
+// GetSlackAgentSessionResume returns whether Slack Codex session resume is enabled.
+func GetSlackAgentSessionResume() bool {
+	return viper.GetBool("slack.agent.session_resume")
 }
 
 // GetWebhookListenAddr returns the listen address for webhook server.
