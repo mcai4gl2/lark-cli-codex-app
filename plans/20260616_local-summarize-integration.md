@@ -48,7 +48,7 @@ go test ./internal/summarizer/... -tags integration -run TestSummarizerQuality -
 - Compression ratio ≤ `QUALITY_MAX_RATIO` (default `0.85`) — summary is at most 85% of original length
 - Repetition score = 0 — no 5-word n-gram appears 3+ times (catches model degeneration)
 
-- [ ] **Step 1: Write `internal/summarizer/quality_test.go`**
+- [x] **Step 1: Write `internal/summarizer/quality_test.go`**
 
 ```go
 //go:build integration
@@ -246,14 +246,14 @@ func qualityTruncate(s string, max int) string {
 }
 ```
 
-- [ ] **Step 2: Verify the file compiles with the integration tag**
+- [x] **Step 2: Verify the file compiles with the integration tag**
 
 ```bash
 go build -tags integration ./internal/summarizer/...
 ```
 Expected: no errors.
 
-- [ ] **Step 3: Run against a live local summarizer (skip if not available)**
+- [x] **Step 3: Run against a live local summarizer (skip if not available)**
 
 Start the local summarizer docker service, then:
 
@@ -265,7 +265,7 @@ go test ./internal/summarizer/... -tags integration -run TestSummarizerQuality -
 
 If the service is not running the test auto-skips. Review the printed report to judge summary quality before proceeding with integration.
 
-- [ ] **Step 4: Optionally relax the compression threshold for short-but-verbose records**
+- [x] **Step 4: Optionally relax the compression threshold for short-but-verbose records**
 
 If the model produces good summaries but ratio fails (e.g., the original was only 350 chars), re-run with a relaxed threshold:
 
@@ -276,7 +276,7 @@ QUALITY_MAX_RATIO=0.95 \
 go test ./internal/summarizer/... -tags integration -run TestSummarizerQuality -v -count=1
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/summarizer/quality_test.go
@@ -291,7 +291,7 @@ git commit -m "test: add integration quality test for local summarizer against r
 - Create: `internal/summarizer/client.go`
 - Create: `internal/summarizer/client_test.go`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```go
 // internal/summarizer/client_test.go
@@ -391,7 +391,7 @@ func TestClient_Available_unhealthy(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests to confirm they fail**
+- [x] **Step 2: Run tests to confirm they fail**
 
 ```bash
 cd /home/ligeng/Codes/lark-cli-codex-app
@@ -399,7 +399,7 @@ go test ./internal/summarizer/... 2>&1
 ```
 Expected: `cannot find package` or `no Go files in ...`
 
-- [ ] **Step 3: Implement `internal/summarizer/client.go`**
+- [x] **Step 3: Implement `internal/summarizer/client.go`**
 
 ```go
 package summarizer
@@ -518,14 +518,14 @@ func (c *Client) Summarize(ctx context.Context, text string) (string, error) {
 }
 ```
 
-- [ ] **Step 4: Run tests to confirm they pass**
+- [x] **Step 4: Run tests to confirm they pass**
 
 ```bash
 go test ./internal/summarizer/... -v
 ```
 Expected: all 5 tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/summarizer/client.go internal/summarizer/client_test.go
@@ -539,7 +539,7 @@ git commit -m "feat: add internal/summarizer HTTP client for local Gemma model"
 **Files:**
 - Modify: `internal/config/config.go`
 
-- [ ] **Step 1: Add struct and getters — find the `Slack` struct in config.go (around line 39) and append `LocalSummarizer` block**
+- [x] **Step 1: Add struct and getters — find the `Slack` struct in config.go (around line 39) and append `LocalSummarizer` block**
 
 In the `Slack` struct inside `Config`, after the `Agent` sub-struct, add:
 
@@ -553,7 +553,7 @@ In the `Slack` struct inside `Config`, after the `Agent` sub-struct, add:
 		} `mapstructure:"local_summarizer"`
 ```
 
-- [ ] **Step 2: Add defaults — in the `Init()` function after the existing slack defaults (around line 133)**
+- [x] **Step 2: Add defaults — in the `Init()` function after the existing slack defaults (around line 133)**
 
 ```go
 	viper.SetDefault("slack.local_summarizer.enabled", false)
@@ -563,7 +563,7 @@ In the `Slack` struct inside `Config`, after the `Agent` sub-struct, add:
 	viper.SetDefault("slack.local_summarizer.min_chars", 300)
 ```
 
-- [ ] **Step 3: Add env bindings — after the existing `slack.memory.*` bindings (around line 190)**
+- [x] **Step 3: Add env bindings — after the existing `slack.memory.*` bindings (around line 190)**
 
 ```go
 	viper.BindEnv("slack.local_summarizer.enabled", "SLACK_LOCAL_SUMMARIZER_ENABLED")
@@ -573,7 +573,7 @@ In the `Slack` struct inside `Config`, after the `Agent` sub-struct, add:
 	viper.BindEnv("slack.local_summarizer.min_chars", "SLACK_LOCAL_SUMMARIZER_MIN_CHARS")
 ```
 
-- [ ] **Step 4: Add getter functions — after `GetSlackMemoryMaxTranscriptRecords` (around line 431)**
+- [x] **Step 4: Add getter functions — after `GetSlackMemoryMaxTranscriptRecords` (around line 431)**
 
 ```go
 // GetSlackLocalSummarizerEnabled returns whether the local summarizer is enabled for Slack transcripts.
@@ -614,14 +614,14 @@ func GetSlackLocalSummarizerMinChars() int {
 }
 ```
 
-- [ ] **Step 5: Verify the project still compiles**
+- [x] **Step 5: Verify the project still compiles**
 
 ```bash
 go build ./...
 ```
 Expected: no errors.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add internal/config/config.go
@@ -636,7 +636,7 @@ git commit -m "feat: add slack.local_summarizer config block with URL, token, ti
 - Modify: `internal/slackmemory/context.go`
 - Modify: `internal/slackmemory/context_test.go`
 
-- [ ] **Step 1: Write the failing tests — append to `context_test.go`**
+- [x] **Step 1: Write the failing tests — append to `context_test.go`**
 
 First check what's already in the test file:
 
@@ -827,14 +827,14 @@ func writeTempFile(t *testing.T, dir, name, content string) string {
 }
 ```
 
-- [ ] **Step 2: Run tests to confirm they fail**
+- [x] **Step 2: Run tests to confirm they fail**
 
 ```bash
 go test ./internal/slackmemory/... -run TestBuildRecentTranscript_summarize -v 2>&1
 ```
 Expected: compilation errors because `Summarizer` field and `SummarizeMinChars` don't exist yet.
 
-- [ ] **Step 3: Add `Summarizer` interface and fields to `context.go`**
+- [x] **Step 3: Add `Summarizer` interface and fields to `context.go`**
 
 At the top of `internal/slackmemory/context.go`, add the import and interface. The `Summarizer` interface is defined in the `slackmemory` package to avoid an import cycle (the `summarizer` package has no dependency on `slackmemory`; this interface is satisfied by `*summarizer.Client`).
 
@@ -858,7 +858,7 @@ type Summarizer interface {
 }
 ```
 
-- [ ] **Step 4: Extend `ContextOptions` and `TranscriptOptions`**
+- [x] **Step 4: Extend `ContextOptions` and `TranscriptOptions`**
 
 Change `ContextOptions` to:
 ```go
@@ -882,7 +882,7 @@ type TranscriptOptions struct {
 }
 ```
 
-- [ ] **Step 5: Pass summarizer fields through `BuildPromptContext` into `BuildRecentTranscript`**
+- [x] **Step 5: Pass summarizer fields through `BuildPromptContext` into `BuildRecentTranscript`**
 
 In `BuildPromptContext`, update the `BuildRecentTranscript` call (around line 53):
 
@@ -896,7 +896,7 @@ In `BuildPromptContext`, update the `BuildRecentTranscript` call (around line 53
 		})
 ```
 
-- [ ] **Step 6: Add summarization logic in `BuildRecentTranscript`**
+- [x] **Step 6: Add summarization logic in `BuildRecentTranscript`**
 
 Inside the loop in `BuildRecentTranscript`, replace the existing `rendered := renderTranscriptRecord(record)` section with:
 
@@ -917,14 +917,14 @@ Inside the loop in `BuildRecentTranscript`, replace the existing `rendered := re
 		}
 ```
 
-- [ ] **Step 7: Run tests to confirm they pass**
+- [x] **Step 7: Run tests to confirm they pass**
 
 ```bash
 go test ./internal/slackmemory/... -v
 ```
 Expected: all tests pass.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add internal/slackmemory/context.go internal/slackmemory/context_test.go
@@ -938,7 +938,7 @@ git commit -m "feat: slackmemory transcript now optionally summarizes long outbo
 **Files:**
 - Modify: `internal/slack/gateway.go`
 
-- [ ] **Step 1: Add fields to `Config` struct**
+- [x] **Step 1: Add fields to `Config` struct**
 
 In `internal/slack/gateway.go`, add two fields to the `Config` struct after `ProcessingReactionName`:
 
@@ -953,7 +953,7 @@ Add the import at the top of the file:
 "github.com/yjwong/lark-cli/internal/summarizer"
 ```
 
-- [ ] **Step 2: Update `memoryPromptProvider` to carry the summarizer**
+- [x] **Step 2: Update `memoryPromptProvider` to carry the summarizer**
 
 Change `memoryPromptProvider` struct to:
 
@@ -984,7 +984,7 @@ func (p memoryPromptProvider) PromptContext(entry inbound.LoggedEvent) (string, 
 }
 ```
 
-- [ ] **Step 3: Pass `LocalSummarizer` when constructing `memoryPromptProvider` in `NewGateway`**
+- [x] **Step 3: Pass `LocalSummarizer` when constructing `memoryPromptProvider` in `NewGateway`**
 
 Update the `cfg.Agent.ContextProvider = memoryPromptProvider{...}` block:
 
@@ -1000,14 +1000,14 @@ Update the `cfg.Agent.ContextProvider = memoryPromptProvider{...}` block:
 		}
 ```
 
-- [ ] **Step 4: Verify compilation**
+- [x] **Step 4: Verify compilation**
 
 ```bash
 go build ./internal/slack/...
 ```
 Expected: no errors.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/slack/gateway.go
@@ -1021,7 +1021,7 @@ git commit -m "feat: wire local summarizer into Slack gateway memory prompt prov
 **Files:**
 - Modify: `internal/cmd/slack.go`
 
-- [ ] **Step 1: Import the summarizer package**
+- [x] **Step 1: Import the summarizer package**
 
 Add to the import block in `internal/cmd/slack.go`:
 
@@ -1029,7 +1029,7 @@ Add to the import block in `internal/cmd/slack.go`:
 "github.com/yjwong/lark-cli/internal/summarizer"
 ```
 
-- [ ] **Step 2: Instantiate the client and populate `cfg` in `slackGatewayServeCmd.Run`**
+- [x] **Step 2: Instantiate the client and populate `cfg` in `slackGatewayServeCmd.Run`**
 
 After the `agentCfg` block and before `cfg := slackgateway.Config{...}`, add:
 
@@ -1062,21 +1062,21 @@ Also add to the startup log output JSON map:
 			"local_summarizer_min_chars": config.GetSlackLocalSummarizerMinChars(),
 ```
 
-- [ ] **Step 3: Verify the full project builds**
+- [x] **Step 3: Verify the full project builds**
 
 ```bash
 go build ./...
 ```
 Expected: no errors.
 
-- [ ] **Step 4: Run all tests**
+- [x] **Step 4: Run all tests**
 
 ```bash
 go test ./... 2>&1
 ```
 Expected: all pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/cmd/slack.go
@@ -1090,7 +1090,7 @@ git commit -m "feat: instantiate local summarizer from config and pass to Slack 
 **Files:**
 - Modify: `config.example.yaml`
 
-- [ ] **Step 1: Add the `local_summarizer` block inside the `slack:` section**
+- [x] **Step 1: Add the `local_summarizer` block inside the `slack:` section**
 
 After the `slack.memory:` block (after line 73) and before `slack.agent:`, add:
 
@@ -1110,13 +1110,13 @@ After the `slack.memory:` block (after line 73) and before `slack.agent:`, add:
     min_chars: 300
 ```
 
-- [ ] **Step 2: Verify the project still builds**
+- [x] **Step 2: Verify the project still builds**
 
 ```bash
 go build ./...
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add config.example.yaml
