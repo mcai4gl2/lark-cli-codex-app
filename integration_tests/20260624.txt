@@ -1,0 +1,16 @@
+=== RUN   TestCodexIntegration
+=== RUN   TestCodexIntegration/prerequisite
+=== RUN   TestCodexIntegration/basic_single_shot
+slack-gateway: 2026/06/24 01:39:42 received message event provider=slack message_id=1750000000.000001 channel_id=C_BASIC user_id=U_HUMAN
+=== RUN   TestCodexIntegration/session_resume
+slack-gateway: 2026/06/24 01:39:52 received message event provider=slack message_id=1750000000.000100 channel_id=C_RESUME user_id=U_HUMAN
+slack-gateway: 2026/06/24 01:40:01 received message event provider=slack message_id=1750000000.000101 channel_id=C_RESUME user_id=U_HUMAN
+=== RUN   TestCodexIntegration/resume_fallback
+slack-gateway: 2026/06/24 01:40:06 received message event provider=slack message_id=1750000000.000200 channel_id=C_FALLBACK user_id=U_HUMAN
+slack-gateway: 2026/06/24 01:40:07 session resume failed for 00000000-dead-beef-0000-000000000000, falling back to new session: Error: thread/resume: thread/resume failed: no rollout found for thread id 00000000-dead-beef-0000-000000000000 (code -32600)
+--- PASS: TestCodexIntegration (43.34s)
+    --- PASS: TestCodexIntegration/prerequisite (13.61s)
+    --- PASS: TestCodexIntegration/basic_single_shot (10.08s)
+    --- PASS: TestCodexIntegration/session_resume (14.18s)
+    --- PASS: TestCodexIntegration/resume_fallback (5.47s)
+PASS

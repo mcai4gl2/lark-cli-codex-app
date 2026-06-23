@@ -11,6 +11,7 @@ lark-cal
 
 # Test binary
 *.test
+codex_integration.test
 
 # Output of go coverage
 *.out
