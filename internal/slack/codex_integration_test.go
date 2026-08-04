@@ -241,7 +241,7 @@ func TestCodexIntegration(t *testing.T) {
 		key := agent.SessionKey{Provider: "slack", ChannelID: channel, ThreadTS: threadTS}
 		const bogus = "00000000-dead-beef-0000-000000000000"
 
-		if err := store.Put(key, bogus); err != nil {
+		if err := store.Put(key, "codex", bogus); err != nil {
 			t.Fatalf("seed bogus session id: %v", err)
 		}
 

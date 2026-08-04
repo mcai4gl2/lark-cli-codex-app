@@ -18,6 +18,7 @@ type SessionKey struct {
 
 type SessionRecord struct {
 	Key       SessionKey `json:"key"`
+	Backend   string     `json:"backend,omitempty"`
 	SessionID string     `json:"session_id"`
 	CreatedAt string     `json:"created_at"`
 	UpdatedAt string     `json:"updated_at"`
@@ -40,9 +41,9 @@ func (s *SessionStore) Enabled() bool {
 	return s != nil && strings.TrimSpace(s.path) != ""
 }
 
-func (s *SessionStore) Lookup(key SessionKey) (string, error) {
+func (s *SessionStore) LookupRecord(key SessionKey) (SessionRecord, bool, error) {
 	if !s.Enabled() {
-		return "", nil
+		return SessionRecord{}, false, nil
 	}
 
 	s.mu.Lock()
@@ -50,17 +51,32 @@ func (s *SessionStore) Lookup(key SessionKey) (string, error) {
 
 	state, err := s.loadLocked()
 	if err != nil {
-		return "", err
+		return SessionRecord{}, false, err
 	}
 	idx := findSession(state.Sessions, key)
 	if idx < 0 {
-		return "", nil
+		return SessionRecord{}, false, nil
 	}
-	return state.Sessions[idx].SessionID, nil
+	return state.Sessions[idx], true, nil
 }
 
-func (s *SessionStore) Put(key SessionKey, sessionID string) error {
-	if !s.Enabled() || strings.TrimSpace(sessionID) == "" {
+func (s *SessionStore) Lookup(key SessionKey) (string, error) {
+	rec, ok, err := s.LookupRecord(key)
+	if err != nil || !ok {
+		return "", err
+	}
+	return rec.SessionID, nil
+}
+
+// Put upserts the record. Persists when backend or sessionID is non-empty after trim.
+// Empty sessionID clears any previous session id while keeping/updating backend.
+func (s *SessionStore) Put(key SessionKey, backend, sessionID string) error {
+	if !s.Enabled() {
+		return nil
+	}
+	backend = strings.TrimSpace(backend)
+	sessionID = strings.TrimSpace(sessionID)
+	if backend == "" && sessionID == "" {
 		return nil
 	}
 
@@ -77,12 +93,17 @@ func (s *SessionStore) Put(key SessionKey, sessionID string) error {
 	if idx < 0 {
 		state.Sessions = append(state.Sessions, SessionRecord{
 			Key:       key,
-			SessionID: strings.TrimSpace(sessionID),
+			Backend:   backend,
+			SessionID: sessionID,
 			CreatedAt: now,
 			UpdatedAt: now,
 		})
 	} else {
-		state.Sessions[idx].SessionID = strings.TrimSpace(sessionID)
+		if backend != "" {
+			state.Sessions[idx].Backend = backend
+		}
+		// Always write sessionID (may clear on backend switch).
+		state.Sessions[idx].SessionID = sessionID
 		state.Sessions[idx].UpdatedAt = now
 	}
 	return s.saveLocked(state)

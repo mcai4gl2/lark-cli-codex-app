@@ -670,7 +670,7 @@ func TestRunnerSessionResumeFallback(t *testing.T) {
 	sessionDir := t.TempDir()
 	store := NewSessionStore(filepath.Join(sessionDir, "sessions.json"))
 	key := SessionKey{Provider: "slack", ChannelID: "C123", ThreadTS: "1712345678.000100"}
-	store.Put(key, "stale-session-id")
+	store.Put(key, "codex", "stale-session-id")
 
 	scriptDir := t.TempDir()
 	callCount := filepath.Join(scriptDir, "call-count")

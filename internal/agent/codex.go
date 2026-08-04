@@ -202,7 +202,7 @@ func (r *Runner) execute(entry inbound.LoggedEvent) (string, error) {
 	}
 
 	if result.SessionID != "" && r.cfg.SessionResume && r.cfg.SessionStore != nil {
-		if putErr := r.cfg.SessionStore.Put(sessionKeyFromEntry(entry), result.SessionID); putErr != nil {
+		if putErr := r.cfg.SessionStore.Put(sessionKeyFromEntry(entry), backend.Name(), result.SessionID); putErr != nil {
 			r.logger.Printf("failed to store session for message_id=%s: %v", entry.MessageID, putErr)
 		}
 	}

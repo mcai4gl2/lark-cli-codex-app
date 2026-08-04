@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -20,7 +21,7 @@ func TestSessionStorePutAndLookup(t *testing.T) {
 	store := NewSessionStore(filepath.Join(t.TempDir(), "sessions.json"))
 	key := SessionKey{Provider: "slack", ChannelID: "C1", ThreadTS: "1.0"}
 
-	if err := store.Put(key, "sess-abc"); err != nil {
+	if err := store.Put(key, "", "sess-abc"); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
 
@@ -37,8 +38,8 @@ func TestSessionStorePutUpdates(t *testing.T) {
 	store := NewSessionStore(filepath.Join(t.TempDir(), "sessions.json"))
 	key := SessionKey{Provider: "slack", ChannelID: "C1", ThreadTS: "1.0"}
 
-	store.Put(key, "sess-1")
-	store.Put(key, "sess-2")
+	store.Put(key, "", "sess-1")
+	store.Put(key, "", "sess-2")
 
 	id, _ := store.Lookup(key)
 	if id != "sess-2" {
@@ -50,7 +51,7 @@ func TestSessionStoreRemove(t *testing.T) {
 	store := NewSessionStore(filepath.Join(t.TempDir(), "sessions.json"))
 	key := SessionKey{Provider: "slack", ChannelID: "C1", ThreadTS: "1.0"}
 
-	store.Put(key, "sess-abc")
+	store.Put(key, "", "sess-abc")
 
 	removed, err := store.Remove(key)
 	if err != nil {
@@ -83,9 +84,9 @@ func TestSessionStoreMultipleKeys(t *testing.T) {
 	k2 := SessionKey{Provider: "slack", ChannelID: "C1", ThreadTS: "2.0"}
 	k3 := SessionKey{Provider: "slack", ChannelID: "C2", ThreadTS: "1.0"}
 
-	store.Put(k1, "s1")
-	store.Put(k2, "s2")
-	store.Put(k3, "s3")
+	store.Put(k1, "", "s1")
+	store.Put(k2, "", "s2")
+	store.Put(k3, "", "s3")
 
 	for _, tc := range []struct {
 		key  SessionKey
@@ -111,7 +112,7 @@ func TestSessionStoreNilDisabled(t *testing.T) {
 	if err != nil || id != "" {
 		t.Fatalf("nil store Lookup: id=%q err=%v", id, err)
 	}
-	if err := store.Put(SessionKey{}, "x"); err != nil {
+	if err := store.Put(SessionKey{}, "", "x"); err != nil {
 		t.Fatalf("nil store Put: %v", err)
 	}
 	removed, err := store.Remove(SessionKey{})
@@ -125,7 +126,7 @@ func TestSessionStorePersistsToDisk(t *testing.T) {
 	key := SessionKey{Provider: "slack", ChannelID: "C1", ThreadTS: "1.0"}
 
 	store1 := NewSessionStore(path)
-	store1.Put(key, "persistent-id")
+	store1.Put(key, "", "persistent-id")
 
 	store2 := NewSessionStore(path)
 	id, err := store2.Lookup(key)
@@ -134,5 +135,58 @@ func TestSessionStorePersistsToDisk(t *testing.T) {
 	}
 	if id != "persistent-id" {
 		t.Fatalf("session id = %q, want persistent-id", id)
+	}
+}
+
+func TestSessionStorePutAndLookupRecordWithBackend(t *testing.T) {
+	store := NewSessionStore(filepath.Join(t.TempDir(), "sessions.json"))
+	key := SessionKey{Provider: "slack", ChannelID: "C1", ThreadTS: "1.0"}
+
+	if err := store.Put(key, "grok", ""); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	rec, ok, err := store.LookupRecord(key)
+	if err != nil || !ok {
+		t.Fatalf("LookupRecord: ok=%v err=%v", ok, err)
+	}
+	if rec.Backend != "grok" || rec.SessionID != "" {
+		t.Fatalf("record = %+v", rec)
+	}
+
+	if err := store.Put(key, "codex", "sess-1"); err != nil {
+		t.Fatalf("Put update: %v", err)
+	}
+	rec, ok, err = store.LookupRecord(key)
+	if err != nil || !ok {
+		t.Fatalf("LookupRecord after update: ok=%v err=%v", ok, err)
+	}
+	if rec.Backend != "codex" || rec.SessionID != "sess-1" {
+		t.Fatalf("record = %+v", rec)
+	}
+}
+
+func TestSessionStoreLegacyJSONWithoutBackend(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sessions.json")
+	legacy := `{
+  "sessions": [
+    {
+      "key": {"provider": "slack", "channel_id": "C1", "thread_ts": "1.0"},
+      "session_id": "legacy-sess",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z"
+    }
+  ]
+}
+`
+	if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	store := NewSessionStore(path)
+	rec, ok, err := store.LookupRecord(SessionKey{Provider: "slack", ChannelID: "C1", ThreadTS: "1.0"})
+	if err != nil || !ok {
+		t.Fatalf("LookupRecord: ok=%v err=%v", ok, err)
+	}
+	if rec.Backend != "" || rec.SessionID != "legacy-sess" {
+		t.Fatalf("legacy record = %+v (Backend should be empty/unpinned)", rec)
 	}
 }
