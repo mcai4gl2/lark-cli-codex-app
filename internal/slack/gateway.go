@@ -101,7 +101,8 @@ func NewGateway(cfg Config) *Gateway {
 		}
 		cfg.Agent.ReplyObserver = memoryReplyObserver{store: memoryStore}
 	}
-	if cfg.Agent.SessionResume && strings.TrimSpace(cfg.MemoryRoot) != "" {
+	// SessionStore holds sticky backend pins even when session resume is off.
+	if strings.TrimSpace(cfg.MemoryRoot) != "" {
 		cfg.Agent.SessionStore = agent.NewSessionStore(
 			filepath.Join(cfg.MemoryRoot, ".state", "sessions.json"),
 		)
@@ -521,6 +522,7 @@ type DefaultAgentConfigInput struct {
 	Backend        string
 	Binary         string
 	CodexBinary    string
+	GrokBinary     string
 	Workspace      string
 	Model          string
 	Args           []string
@@ -541,6 +543,7 @@ func DefaultAgentConfig(input DefaultAgentConfigInput) agent.Config {
 		Binary:         input.Binary,
 		Args:           input.Args,
 		CodexBinary:    input.CodexBinary,
+		GrokBinary:     input.GrokBinary,
 		Workspace:      input.Workspace,
 		Model:          input.Model,
 		AckText:        input.AckText,

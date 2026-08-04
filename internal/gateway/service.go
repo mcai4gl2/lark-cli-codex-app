@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -201,16 +202,22 @@ func DefaultAgentConfig() agent.Config {
 	if timeoutMinutes <= 0 {
 		timeoutMinutes = 20
 	}
-	return agent.Config{
+	cfg := agent.Config{
 		Enabled:        config.GetAgentEnabled(),
 		Backend:        config.GetAgentBackend(),
 		Binary:         config.GetAgentBinary(),
 		Args:           config.GetAgentArgs(),
 		CodexBinary:    config.GetAgentCodexBinary(),
+		GrokBinary:     config.GetAgentGrokBinary(),
 		Workspace:      config.GetAgentWorkspace(),
 		Model:          config.GetAgentModel(),
 		AckText:        config.GetAgentAckText(),
 		ResultMaxChars: config.GetAgentResultMaxChars(),
 		Timeout:        time.Duration(timeoutMinutes) * time.Minute,
+		SessionResume:  config.GetAgentSessionResume(),
 	}
+	if cfg.Enabled {
+		cfg.SessionStore = agent.NewSessionStore(filepath.Join(config.GetConfigDir(), "agent-sessions.json"))
+	}
+	return cfg
 }

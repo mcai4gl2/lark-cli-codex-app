@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/spf13/cobra"
+	"github.com/yjwong/lark-cli/internal/agent"
 	"github.com/yjwong/lark-cli/internal/config"
 	"github.com/yjwong/lark-cli/internal/output"
 	"github.com/yjwong/lark-cli/internal/platform"
@@ -111,6 +112,7 @@ Examples:
 			Backend:        config.GetSlackAgentBackend(),
 			Binary:         config.GetSlackAgentBinary(),
 			CodexBinary:    config.GetSlackAgentCodexBinary(),
+			GrokBinary:     config.GetSlackAgentGrokBinary(),
 			Workspace:      config.GetSlackAgentWorkspace(),
 			Model:          config.GetSlackAgentModel(),
 			Args:           config.GetSlackAgentArgs(),
@@ -130,6 +132,9 @@ Examples:
 		}
 		if strings.TrimSpace(slackGatewayAgentWorkspace) != "" {
 			agentCfg.Workspace = strings.TrimSpace(slackGatewayAgentWorkspace)
+		}
+		if err := agent.ValidateDefaultBackend(agentCfg.Backend); err != nil {
+			output.Fatal("AGENT_BACKEND", err)
 		}
 
 		var localSummarizer *summarizer.Client
@@ -525,7 +530,7 @@ func init() {
 	slackGatewayServeCmd.Flags().StringVar(&slackGatewayEventLogPath, "event-log", "", "path to JSONL event log file")
 	slackGatewayServeCmd.Flags().StringVar(&slackGatewayAutoReplyText, "auto-reply-text", "", "optional plain-text auto-reply template; supports {{text}}, {{channel_id}}, {{message_id}}, {{user_id}}")
 	slackGatewayServeCmd.Flags().BoolVar(&slackGatewayAgentEnabled, "agent", false, "dispatch inbound Slack messages to local agent tasks")
-	slackGatewayServeCmd.Flags().StringVar(&slackGatewayAgentBackend, "agent-backend", "", "agent backend: codex or agy")
+	slackGatewayServeCmd.Flags().StringVar(&slackGatewayAgentBackend, "agent-backend", "", "agent backend: codex, agy, or grok")
 	slackGatewayServeCmd.Flags().StringVar(&slackGatewayAgentBinary, "agent-binary", "", "agent backend binary path or command name")
 	slackGatewayServeCmd.Flags().StringVar(&slackGatewayAgentWorkspace, "agent-workspace", "", "workspace root used when the local agent executes tasks")
 	slackGatewayServeCmd.Flags().BoolVar(&slackGatewayDesktopWorker, "desktop-worker", false, "run the local desktop task worker inside the gateway process")

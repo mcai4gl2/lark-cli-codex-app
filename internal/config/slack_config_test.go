@@ -162,6 +162,7 @@ func TestAgentBackendConfigFromYAML(t *testing.T) {
 agent:
   backend: agy
   binary: /opt/bin/agy
+  grok_binary: /opt/bin/grok
   args:
     - --dangerously-skip-permissions
     - --print-timeout=10m
@@ -169,6 +170,7 @@ slack:
   agent:
     backend: agy
     binary: /usr/local/bin/agy
+    grok_binary: /usr/local/bin/grok
     args:
       - --sandbox
       - --print-timeout=8m
@@ -187,6 +189,9 @@ slack:
 	if got := GetAgentBinary(); got != "/opt/bin/agy" {
 		t.Fatalf("GetAgentBinary() = %q", got)
 	}
+	if got := GetAgentGrokBinary(); got != "/opt/bin/grok" {
+		t.Fatalf("GetAgentGrokBinary() = %q", got)
+	}
 	if got := GetAgentArgs(); !reflect.DeepEqual(got, []string{"--dangerously-skip-permissions", "--print-timeout=10m"}) {
 		t.Fatalf("GetAgentArgs() = %#v", got)
 	}
@@ -195,6 +200,9 @@ slack:
 	}
 	if got := GetSlackAgentBinary(); got != "/usr/local/bin/agy" {
 		t.Fatalf("GetSlackAgentBinary() = %q", got)
+	}
+	if got := GetSlackAgentGrokBinary(); got != "/usr/local/bin/grok" {
+		t.Fatalf("GetSlackAgentGrokBinary() = %q", got)
 	}
 	if got := GetSlackAgentArgs(); !reflect.DeepEqual(got, []string{"--sandbox", "--print-timeout=8m"}) {
 		t.Fatalf("GetSlackAgentArgs() = %#v", got)
@@ -210,6 +218,7 @@ func TestSlackAgentBackendEnvOverridesFileConfig(t *testing.T) {
 	t.Setenv("SLACK_AGENT_BINARY", "/env/bin/agy")
 	t.Setenv("SLACK_AGENT_ARGS", " --sandbox, ,--print-timeout=9m ")
 	t.Setenv("SLACK_AGENT_CODEX_BINARY", "legacy-codex")
+	t.Setenv("SLACK_AGENT_GROK_BINARY", "/env/bin/grok")
 	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
 		t.Fatalf("MkdirAll(config): %v", err)
 	}
@@ -240,5 +249,8 @@ slack:
 	}
 	if got := GetSlackAgentCodexBinary(); got != "legacy-codex" {
 		t.Fatalf("GetSlackAgentCodexBinary() = %q", got)
+	}
+	if got := GetSlackAgentGrokBinary(); got != "/env/bin/grok" {
+		t.Fatalf("GetSlackAgentGrokBinary() = %q", got)
 	}
 }

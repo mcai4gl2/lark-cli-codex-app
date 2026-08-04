@@ -34,6 +34,7 @@ func TestDefaultAgentConfigIncludesBackendFields(t *testing.T) {
 		Backend:        "agy",
 		Binary:         "/opt/bin/agy",
 		CodexBinary:    "legacy-codex",
+		GrokBinary:     "/opt/bin/grok",
 		Workspace:      "/workspace",
 		Model:          "gemini-test",
 		Args:           []string{"--dangerously-skip-permissions"},
@@ -45,6 +46,9 @@ func TestDefaultAgentConfigIncludesBackendFields(t *testing.T) {
 	if cfg.Backend != "agy" || cfg.Binary != "/opt/bin/agy" || cfg.CodexBinary != "legacy-codex" {
 		t.Fatalf("backend fields = %#v", cfg)
 	}
+	if cfg.GrokBinary != "/opt/bin/grok" {
+		t.Fatalf("GrokBinary = %q", cfg.GrokBinary)
+	}
 	if len(cfg.Args) != 1 || cfg.Args[0] != "--dangerously-skip-permissions" {
 		t.Fatalf("Args = %#v", cfg.Args)
 	}
@@ -52,6 +56,23 @@ func TestDefaultAgentConfigIncludesBackendFields(t *testing.T) {
 		t.Fatalf("Timeout = %s", cfg.Timeout)
 	}
 	var _ agent.Config = cfg
+}
+
+func TestNewGatewayWiresSessionStoreWithoutResume(t *testing.T) {
+	memoryRoot := t.TempDir()
+	gw := NewGateway(Config{
+		AppToken:   "xapp-test",
+		BotToken:   "xoxb-test",
+		MemoryRoot: memoryRoot,
+		Agent: agent.Config{
+			Enabled:       true,
+			Backend:       "codex",
+			SessionResume: false,
+		},
+	})
+	if gw.cfg.Agent.SessionStore == nil || !gw.cfg.Agent.SessionStore.Enabled() {
+		t.Fatal("expected SessionStore when MemoryRoot is set even if SessionResume is false")
+	}
 }
 
 func (m *captureMessenger) Reply(_ context.Context, event platform.MessageEvent, text string) error {

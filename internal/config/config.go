@@ -26,6 +26,7 @@ type Config struct {
 		Binary         string   `mapstructure:"binary"`
 		Args           []string `mapstructure:"args"`
 		CodexBinary    string   `mapstructure:"codex_binary"`
+		GrokBinary     string   `mapstructure:"grok_binary"`
 		Workspace      string   `mapstructure:"workspace"`
 		Model          string   `mapstructure:"model"`
 		AckText        string   `mapstructure:"ack_text"`
@@ -69,6 +70,7 @@ type Config struct {
 			Binary         string   `mapstructure:"binary"`
 			Args           []string `mapstructure:"args"`
 			CodexBinary    string   `mapstructure:"codex_binary"`
+			GrokBinary     string   `mapstructure:"grok_binary"`
 			Workspace      string   `mapstructure:"workspace"`
 			Model          string   `mapstructure:"model"`
 			AckText        string   `mapstructure:"ack_text"`
@@ -132,6 +134,7 @@ func Init() error {
 	viper.SetDefault("agent.binary", "")
 	viper.SetDefault("agent.args", []string{})
 	viper.SetDefault("agent.codex_binary", "codex")
+	viper.SetDefault("agent.grok_binary", "grok")
 	viper.SetDefault("agent.ack_text", "收到，开始处理。")
 	viper.SetDefault("agent.result_max_chars", 1800)
 	viper.SetDefault("agent.timeout_minutes", 20)
@@ -156,6 +159,7 @@ func Init() error {
 	viper.SetDefault("slack.agent.binary", "")
 	viper.SetDefault("slack.agent.args", []string{})
 	viper.SetDefault("slack.agent.codex_binary", "codex")
+	viper.SetDefault("slack.agent.grok_binary", "grok")
 	viper.SetDefault("slack.agent.ack_text", "")
 	viper.SetDefault("slack.agent.result_max_chars", 3500)
 	viper.SetDefault("slack.agent.timeout_minutes", 20)
@@ -172,6 +176,7 @@ func Init() error {
 	viper.BindEnv("agent.binary", "LARK_AGENT_BINARY")
 	viper.BindEnv("agent.args", "LARK_AGENT_ARGS")
 	viper.BindEnv("agent.codex_binary", "LARK_AGENT_CODEX_BINARY")
+	viper.BindEnv("agent.grok_binary", "LARK_AGENT_GROK_BINARY")
 	viper.BindEnv("agent.workspace", "LARK_AGENT_WORKSPACE")
 	viper.BindEnv("agent.model", "LARK_AGENT_MODEL")
 	viper.BindEnv("agent.ack_text", "LARK_AGENT_ACK_TEXT")
@@ -189,6 +194,7 @@ func Init() error {
 	viper.BindEnv("slack.agent.binary", "SLACK_AGENT_BINARY")
 	viper.BindEnv("slack.agent.args", "SLACK_AGENT_ARGS")
 	viper.BindEnv("slack.agent.codex_binary", "SLACK_AGENT_CODEX_BINARY")
+	viper.BindEnv("slack.agent.grok_binary", "SLACK_AGENT_GROK_BINARY")
 	viper.BindEnv("slack.agent.workspace", "SLACK_AGENT_WORKSPACE")
 	viper.BindEnv("slack.agent.model", "SLACK_AGENT_MODEL")
 	viper.BindEnv("slack.agent.ack_text", "SLACK_AGENT_ACK_TEXT")
@@ -294,6 +300,11 @@ func GetAgentArgs() []string {
 // GetAgentCodexBinary returns the codex binary path or command name.
 func GetAgentCodexBinary() string {
 	return strings.TrimSpace(viper.GetString("agent.codex_binary"))
+}
+
+// GetAgentGrokBinary returns the grok binary path or command name.
+func GetAgentGrokBinary() string {
+	return strings.TrimSpace(viper.GetString("agent.grok_binary"))
 }
 
 // GetAgentWorkspace returns the workspace root used for Codex tasks.
@@ -519,6 +530,11 @@ func GetSlackAgentArgs() []string {
 // GetSlackAgentCodexBinary returns the codex binary path or command name for Slack tasks.
 func GetSlackAgentCodexBinary() string {
 	return strings.TrimSpace(viper.GetString("slack.agent.codex_binary"))
+}
+
+// GetSlackAgentGrokBinary returns the grok binary path or command name for Slack tasks.
+func GetSlackAgentGrokBinary() string {
+	return strings.TrimSpace(viper.GetString("slack.agent.grok_binary"))
 }
 
 // GetSlackAgentWorkspace returns the workspace root used for Slack Codex tasks.

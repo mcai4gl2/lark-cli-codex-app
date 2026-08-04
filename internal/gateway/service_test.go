@@ -77,6 +77,8 @@ func TestDefaultAgentConfigIncludesBackendFields(t *testing.T) {
 	t.Setenv("LARK_AGENT_BACKEND", "agy")
 	t.Setenv("LARK_AGENT_BINARY", "/opt/bin/agy")
 	t.Setenv("LARK_AGENT_ARGS", "--dangerously-skip-permissions,--print-timeout=10m")
+	t.Setenv("LARK_AGENT_GROK_BINARY", "/opt/bin/grok")
+	t.Setenv("LARK_AGENT_ENABLED", "true")
 	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
 		t.Fatalf("MkdirAll(config): %v", err)
 	}
@@ -91,8 +93,14 @@ func TestDefaultAgentConfigIncludesBackendFields(t *testing.T) {
 	if cfg.Binary != "/opt/bin/agy" {
 		t.Fatalf("Binary = %q", cfg.Binary)
 	}
+	if cfg.GrokBinary != "/opt/bin/grok" {
+		t.Fatalf("GrokBinary = %q", cfg.GrokBinary)
+	}
 	if !reflect.DeepEqual(cfg.Args, []string{"--dangerously-skip-permissions", "--print-timeout=10m"}) {
 		t.Fatalf("Args = %#v", cfg.Args)
+	}
+	if cfg.SessionStore == nil || !cfg.SessionStore.Enabled() {
+		t.Fatal("expected SessionStore when agent is enabled")
 	}
 }
 
