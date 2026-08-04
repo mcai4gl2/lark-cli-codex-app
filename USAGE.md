@@ -57,12 +57,12 @@ All commands output JSON by default.
 ### Local Gateway Agent Backends
 
 The Lark and Slack gateways can dispatch inbound chat tasks to a local coding
-agent. Codex remains the default backend, and Antigravity CLI can be selected
-with `agy`:
+agent. Codex remains the default backend; Antigravity CLI (`agy`) and Grok CLI
+(`grok`) are also supported:
 
 ```bash
 ./lark gateway serve --agent --agent-backend agy --agent-workspace ~/WorkSpace/project
-./lark slack gateway serve --agent --agent-backend agy --agent-workspace ~/WorkSpace/project
+./lark slack gateway serve --agent --agent-backend grok --agent-workspace ~/WorkSpace/project
 ```
 
 Backend config:
@@ -70,8 +70,9 @@ Backend config:
 ```yaml
 agent:
   enabled: true
-  backend: "codex" # codex or agy
+  backend: "codex" # codex, agy, or grok
   binary: ""       # empty uses backend default
+  grok_binary: "grok"
   args: []
 
 slack:
@@ -82,6 +83,20 @@ slack:
     workspace: "~/WorkSpace/project"
 ```
 
+#### Per-thread backend selection
+
+Prefix a message with a registered backend to pin the rest of the thread:
+
+```text
+/grok explain this failure
+/agy refactor the helper
+/codex continue with codex
+```
+
+An unrecognized `/word` is treated as normal text. The process-level
+`agent.backend` / `slack.agent.backend` default applies only when a thread has
+no pin yet.
+
 Before using `agy`, validate the installed CLI contract:
 
 ```bash
@@ -90,8 +105,16 @@ agy --version
 agy --add-dir "$PWD" --prompt "Reply with exactly: agy-ok"
 ```
 
+Before using `grok`:
+
+```bash
+grok --help
+grok --version
+grok -p "Reply with exactly: grok-ok" --cwd "$PWD" --output-format plain --always-approve
+```
+
 `codex_binary` is still accepted for older Codex-only configs, but new configs
-should use `backend`, `binary`, and `args`.
+should use `backend`, `binary`, `grok_binary`, and `args`.
 
 ### Authentication
 

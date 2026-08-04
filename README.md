@@ -178,14 +178,21 @@ lark gateway serve \
   --agent-workspace ~/WorkSpace
 ```
 
-使用 Antigravity CLI 后端：
+使用 Antigravity CLI 或 Grok 后端：
 
 ```bash
 lark gateway serve \
   --agent \
   --agent-backend agy \
   --agent-workspace ~/WorkSpace/project
+
+lark gateway serve \
+  --agent \
+  --agent-backend grok \
+  --agent-workspace ~/WorkSpace/project
 ```
+
+也可以在任意线程消息前加 `/codex`、`/agy` 或 `/grok` 前缀，按线程切换并固定后端。
 
 首次使用 `agy` 前建议先验证本机 CLI 的非交互输出：
 
@@ -193,6 +200,14 @@ lark gateway serve \
 agy --help
 agy --version
 agy --add-dir "$PWD" --prompt "Reply with exactly: agy-ok"
+```
+
+首次使用 `grok`：
+
+```bash
+grok --help
+grok --version
+grok -p "Reply with exactly: grok-ok" --cwd "$PWD" --output-format plain --always-approve
 ```
 
 Desktop GUI 请求会进入单独队列。仍然支持 `/gui ` 前缀，但普通桌面请求也会被自动识别，例如：
@@ -209,7 +224,7 @@ Gateway 做的事情：
 - 接收 `im.message.receive_v1` 消息事件，不需要公网回调地址。
 - 将收到的消息事件追加到本地 JSONL 日志。
 - 可选：用机器人自动回复消息。
-- 可选：将飞书消息分发给本地 agent 后端（`codex exec` 或 `agy`）执行，并把结果回复到聊天中。
+- 可选：将飞书消息分发给本地 agent 后端（`codex exec`、`agy` 或 `grok`）执行，并把结果回复到聊天中。
 - 让 Codex 任务通过 `lark` 命令和 Codex skills 回写飞书/Lark。
 - 将显式 `/gui ...` 消息或自动识别出的桌面操作请求放入桌面任务队列。
 

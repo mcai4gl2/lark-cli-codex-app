@@ -155,11 +155,12 @@ Optional agent configuration:
 
 ```bash
 export SLACK_AGENT_ENABLED=true
-export SLACK_AGENT_BACKEND="codex"   # codex or agy
+export SLACK_AGENT_BACKEND="codex"   # codex, agy, or grok
 export SLACK_AGENT_BINARY=""         # empty uses backend default
 export SLACK_AGENT_ARGS=""           # comma-separated extra backend args
 export SLACK_AGENT_WORKSPACE="$HOME/WorkSpace"
 export SLACK_AGENT_CODEX_BINARY="codex"  # legacy Codex-only alias
+export SLACK_AGENT_GROK_BINARY="grok"
 export SLACK_AGENT_ACK_TEXT="Received. Working on it."
 export SLACK_AGENT_RESULT_MAX_CHARS=3500
 export SLACK_AGENT_TIMEOUT_MINUTES=20
@@ -228,7 +229,33 @@ slack:
 ```
 
 `codex_binary` remains supported for old Codex-only configs, but new configs
-should prefer `backend`, `binary`, and `args`.
+should prefer `backend`, `binary`, `grok_binary`, and `args`.
+
+### Per-thread backend selection
+
+Prefix a message with a registered backend to pin the rest of the thread:
+
+```text
+/grok explain this failure
+/agy refactor the helper
+/codex continue with codex
+```
+
+An unrecognized `/word` is treated as normal text. The process-level
+`agent.backend` default applies only when a thread has no pin yet. Switching
+backends mid-thread discards any live Codex session id and starts fresh under
+the new backend.
+
+With the Grok CLI backend, first validate the installed `grok` binary:
+
+```bash
+grok --help
+grok --version
+grok -p "Reply with exactly: grok-ok" --cwd "$PWD" --output-format plain --always-approve
+```
+
+Then either set `backend: "grok"` / `--agent-backend grok`, or leave the default
+as Codex and switch per thread with `/grok ...`.
 
 Slack workspace selection order:
 
@@ -698,7 +725,7 @@ Common flags:
 | Flag | Purpose |
 | --- | --- |
 | `--agent` | Dispatch Slack messages to the configured local agent backend. |
-| `--agent-backend NAME` | Agent backend: `codex` or `agy`. |
+| `--agent-backend NAME` | Agent backend: `codex`, `agy`, or `grok`. |
 | `--agent-binary PATH` | Backend binary path or command name. |
 | `--agent-workspace PATH` | Workspace root used by agent tasks. |
 | `--memory` | Persist Slack audit logs and load explicit memory Markdown into prompts. |

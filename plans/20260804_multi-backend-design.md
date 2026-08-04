@@ -1,7 +1,7 @@
 # Multi-Backend Design: Per-Message Backend Selection + Grok
 
 **Date:** 2026-08-04
-**Status:** Design approved, ready for implementation planning
+**Status:** Implemented (see `plans/20260804_multi-backend-implementation.md`)
 **Scope:** Harden the existing `internal/agent` backend abstraction into a registry, add a
 `GrokBackend`, and let a single chat message pick which backend handles it — with the pick
 sticking for the rest of that thread until changed again.

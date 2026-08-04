@@ -20,7 +20,8 @@ oauth:
 # Optional local task agent powered by a local coding backend.
 agent:
   enabled: false
-  # Agent backend: codex or agy. Defaults to codex.
+  # Agent backend: codex, agy, or grok. Defaults to codex.
+  # Overridable per thread via a leading /codex, /agy, or /grok message prefix.
   backend: "codex"
   # Backend binary path or command name. Empty uses backend default.
   binary: ""
@@ -28,6 +29,8 @@ agent:
   args: []
   # Deprecated compatibility alias for older Codex-only configs. Prefer binary.
   codex_binary: "codex"
+  # Grok CLI binary path or command name (used when backend is grok or /grok pin).
+  grok_binary: "grok"
   workspace: "~/WorkSpace"
   model: ""
   ack_text: "收到，开始处理。"
@@ -86,7 +89,8 @@ slack:
     min_chars: 300
   agent:
     enabled: false
-    # Agent backend: codex or agy. Defaults to codex.
+    # Agent backend: codex, agy, or grok. Defaults to codex.
+    # Overridable per thread via a leading /codex, /agy, or /grok message prefix.
     backend: "codex"
     # Backend binary path or command name. Empty uses backend default.
     binary: ""
@@ -94,6 +98,8 @@ slack:
     args: []
     # Deprecated compatibility alias for older Codex-only configs. Prefer binary.
     codex_binary: "codex"
+    # Grok CLI binary path or command name (used when backend is grok or /grok pin).
+    grok_binary: "grok"
     workspace: "~/WorkSpace"
     model: ""
     ack_text: "Received. Working on it."
