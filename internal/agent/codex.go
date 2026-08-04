@@ -133,29 +133,60 @@ func (r *Runner) run(entry inbound.LoggedEvent) {
 }
 
 func (r *Runner) execute(entry inbound.LoggedEvent) (string, error) {
-	backend, err := resolveBackend(r.cfg)
-	if err != nil {
-		return "", err
-	}
 	tempDir, err := os.MkdirTemp("", "lark-agent-*")
 	if err != nil {
 		return "", fmt.Errorf("create temp dir: %w", err)
 	}
 	defer os.RemoveAll(tempDir)
 
-	sessionID := ""
-	if r.cfg.SessionResume && r.cfg.SessionStore != nil {
+	messageText := entry.MessageText
+	directiveBackend, cleanText, hasDirective := ParseBackendDirective(messageText)
+	if hasDirective {
+		messageText = cleanText
+		entry.MessageText = cleanText
+	}
+
+	var record SessionRecord
+	var hasRecord bool
+	if r.cfg.SessionStore != nil && r.cfg.SessionStore.Enabled() {
 		key := sessionKeyFromEntry(entry)
-		if id, lookupErr := r.cfg.SessionStore.Lookup(key); lookupErr == nil {
-			sessionID = id
-		} else {
+		rec, ok, lookupErr := r.cfg.SessionStore.LookupRecord(key)
+		if lookupErr != nil {
 			r.logger.Printf("session lookup failed for message_id=%s: %v", entry.MessageID, lookupErr)
+		} else {
+			record, hasRecord = rec, ok
 		}
+	}
+
+	effective := configDefaultBackendName(r.cfg.Backend)
+	if hasRecord && strings.TrimSpace(record.Backend) != "" {
+		effective = record.Backend
+	}
+	if hasDirective {
+		effective = directiveBackend
+	}
+
+	backend, ok := Resolve(effective)
+	if !ok {
+		return "", fmt.Errorf("未知后端: %s，可用: %s", effective, strings.Join(RegisteredBackendNames(), ", "))
+	}
+
+	sessionID := ""
+	if r.cfg.SessionResume && hasRecord && strings.TrimSpace(record.SessionID) != "" {
+		// Resume only if the record's backend is empty (legacy) or matches effective.
+		if record.Backend == "" || record.Backend == backend.Name() {
+			sessionID = record.SessionID
+		}
+	}
+	if hasDirective && hasRecord && record.Backend != "" && record.Backend != backend.Name() {
+		r.logger.Printf("thread %s switching backend %s → %s, starting fresh session",
+			sessionKeyFromEntry(entry).ThreadTS, record.Backend, backend.Name())
+		sessionID = ""
 	}
 
 	var prompt string
 	if sessionID != "" {
-		prompt = entry.MessageText
+		prompt = messageText
 	} else {
 		prompt = r.buildFullPrompt(entry, backend)
 	}
@@ -163,7 +194,7 @@ func (r *Runner) execute(entry inbound.LoggedEvent) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), r.cfg.Timeout)
 	defer cancel()
 
-	result, err := backend.Execute(ctx, BackendRequest{
+	req := BackendRequest{
 		Entry:          entry,
 		Prompt:         prompt,
 		Workspace:      r.cfg.Workspace,
@@ -173,25 +204,19 @@ func (r *Runner) execute(entry inbound.LoggedEvent) (string, error) {
 		ResultMaxChars: r.cfg.ResultMaxChars,
 		TempDir:        tempDir,
 		SessionID:      sessionID,
-	})
+	}
+	result, err := backend.Execute(ctx, req)
 
 	if err != nil && sessionID != "" {
 		r.logger.Printf("session resume failed for %s, falling back to new session: %v", sessionID, err)
-		if r.cfg.SessionStore != nil {
-			r.cfg.SessionStore.Remove(sessionKeyFromEntry(entry))
+		// Clear session id but keep the backend pin when possible.
+		if r.cfg.SessionStore != nil && r.cfg.SessionStore.Enabled() {
+			_ = r.cfg.SessionStore.Put(sessionKeyFromEntry(entry), backend.Name(), "")
 		}
 		prompt = r.buildFullPrompt(entry, backend)
-		result, err = backend.Execute(ctx, BackendRequest{
-			Entry:          entry,
-			Prompt:         prompt,
-			Workspace:      r.cfg.Workspace,
-			Model:          r.cfg.Model,
-			Binary:         resolveBackendBinary(r.cfg, backend),
-			Args:           splitArgs(r.cfg.Args),
-			ResultMaxChars: r.cfg.ResultMaxChars,
-			TempDir:        tempDir,
-			SessionID:      "",
-		})
+		req.Prompt = prompt
+		req.SessionID = ""
+		result, err = backend.Execute(ctx, req)
 	}
 
 	if ctx.Err() == context.DeadlineExceeded {
@@ -201,13 +226,31 @@ func (r *Runner) execute(entry inbound.LoggedEvent) (string, error) {
 		return "", err
 	}
 
-	if result.SessionID != "" && r.cfg.SessionResume && r.cfg.SessionStore != nil {
-		if putErr := r.cfg.SessionStore.Put(sessionKeyFromEntry(entry), backend.Name(), result.SessionID); putErr != nil {
+	if r.cfg.SessionStore != nil && r.cfg.SessionStore.Enabled() {
+		sid := ""
+		if r.cfg.SessionResume {
+			sid = result.SessionID
+		}
+		if putErr := r.cfg.SessionStore.Put(sessionKeyFromEntry(entry), backend.Name(), sid); putErr != nil {
 			r.logger.Printf("failed to store session for message_id=%s: %v", entry.MessageID, putErr)
 		}
 	}
 
 	return trimForChat(result.Text, r.cfg.ResultMaxChars), nil
+}
+
+func configDefaultBackendName(name string) string {
+	n := strings.ToLower(strings.TrimSpace(name))
+	if n == "" {
+		return "codex"
+	}
+	return n
+}
+
+// ValidateDefaultBackend reports whether a configured default backend name is registered.
+func ValidateDefaultBackend(name string) error {
+	_, err := resolveBackend(Config{Backend: name})
+	return err
 }
 
 func (r *Runner) buildFullPrompt(entry inbound.LoggedEvent, backend Backend) string {

@@ -763,3 +763,167 @@ func TestSessionKeyFromEntry(t *testing.T) {
 		t.Fatalf("key.ThreadTS = %q, want message_id as fallback", key2.ThreadTS)
 	}
 }
+
+func TestRunnerDirectivePinsBackendForThread(t *testing.T) {
+	dir := t.TempDir()
+	agyPath := filepath.Join(dir, "agy")
+	if err := os.WriteFile(agyPath, []byte("#!/bin/sh\nprintf '%s' 'from-agy'\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile(agy): %v", err)
+	}
+	codexPath := filepath.Join(dir, "codex")
+	if err := os.WriteFile(codexPath, []byte("#!/bin/sh\necho 'codex-should-not-run' >&2\nexit 99\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile(codex): %v", err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	store := NewSessionStore(filepath.Join(t.TempDir(), "sessions.json"))
+	runner := NewRunnerWithMessenger(Config{
+		Enabled:        true,
+		Backend:        "codex",
+		CodexBinary:    codexPath,
+		Workspace:      t.TempDir(),
+		ResultMaxChars: 200,
+		Timeout:        5 * time.Second,
+		SessionResume:  true,
+		SessionStore:   store,
+	}, nil, &fakeMessenger{})
+
+	entry := inbound.LoggedEvent{
+		Provider:    "slack",
+		ChannelID:   "C1",
+		ThreadID:    "1.0",
+		MessageID:   "1.0",
+		UserID:      "U1",
+		MessageText: "/agy first task",
+	}
+	out, err := runner.execute(entry)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if out != "from-agy" {
+		t.Fatalf("out = %q", out)
+	}
+	rec, ok, _ := store.LookupRecord(sessionKeyFromEntry(entry))
+	if !ok || rec.Backend != "agy" {
+		t.Fatalf("pin = %+v ok=%v", rec, ok)
+	}
+
+	entry2 := entry
+	entry2.MessageID = "2.0"
+	entry2.MessageText = "second without directive"
+	out2, err := runner.execute(entry2)
+	if err != nil {
+		t.Fatalf("execute2: %v", err)
+	}
+	if out2 != "from-agy" {
+		t.Fatalf("sticky out = %q", out2)
+	}
+}
+
+func TestRunnerBackendSwitchClearsSessionID(t *testing.T) {
+	dir := t.TempDir()
+	agyPath := filepath.Join(dir, "agy")
+	if err := os.WriteFile(agyPath, []byte("#!/bin/sh\nprintf '%s' 'from-agy'\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile(agy): %v", err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	store := NewSessionStore(filepath.Join(t.TempDir(), "sessions.json"))
+	codexBin := fakeCodexResumeExecutable(t)
+	runner := NewRunnerWithMessenger(Config{
+		Enabled:        true,
+		Backend:        "codex",
+		CodexBinary:    codexBin,
+		Workspace:      t.TempDir(),
+		ResultMaxChars: 200,
+		Timeout:        5 * time.Second,
+		SessionResume:  true,
+		SessionStore:   store,
+	}, nil, &fakeMessenger{})
+
+	entry := inbound.LoggedEvent{
+		Provider:    "slack",
+		ChannelID:   "C1",
+		ThreadID:    "9.0",
+		MessageID:   "9.0",
+		UserID:      "U1",
+		MessageText: "start on codex",
+	}
+	if _, err := runner.execute(entry); err != nil {
+		t.Fatalf("codex execute: %v", err)
+	}
+	rec, ok, _ := store.LookupRecord(sessionKeyFromEntry(entry))
+	if !ok || rec.SessionID == "" || rec.Backend != "codex" {
+		t.Fatalf("after codex: %+v ok=%v", rec, ok)
+	}
+
+	entry2 := entry
+	entry2.MessageID = "9.1"
+	entry2.MessageText = "/agy switch please"
+	out, err := runner.execute(entry2)
+	if err != nil {
+		t.Fatalf("switch execute: %v", err)
+	}
+	if out != "from-agy" {
+		t.Fatalf("out = %q", out)
+	}
+	rec2, ok, _ := store.LookupRecord(sessionKeyFromEntry(entry2))
+	if !ok || rec2.Backend != "agy" {
+		t.Fatalf("after switch: %+v ok=%v", rec2, ok)
+	}
+	if rec2.SessionID != "" {
+		t.Fatalf("session id should be cleared on backend switch, got %q", rec2.SessionID)
+	}
+}
+
+func TestRunnerUnrecognizedDirectivePassthrough(t *testing.T) {
+	store := NewSessionStore(filepath.Join(t.TempDir(), "sessions.json"))
+	capturePath := filepath.Join(t.TempDir(), "prompt.txt")
+	t.Setenv("FAKE_CODEX_CAPTURE_PROMPT", capturePath)
+
+	runner := NewRunnerWithMessenger(Config{
+		Enabled:        true,
+		Backend:        "codex",
+		CodexBinary:    fakeCodexResumeExecutable(t),
+		Workspace:      t.TempDir(),
+		ResultMaxChars: 200,
+		Timeout:        5 * time.Second,
+		SessionResume:  true,
+		SessionStore:   store,
+	}, nil, &fakeMessenger{})
+
+	entry := inbound.LoggedEvent{
+		Provider:    "slack",
+		ChannelID:   "C1",
+		ThreadID:    "3.0",
+		MessageID:   "3.0",
+		UserID:      "U1",
+		MessageText: "/not-a-backend please help",
+	}
+	if _, err := runner.execute(entry); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	data, err := os.ReadFile(capturePath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if !strings.Contains(string(data), "/not-a-backend please help") {
+		t.Fatalf("prompt missing literal slash text: %q", data)
+	}
+	rec, ok, _ := store.LookupRecord(sessionKeyFromEntry(entry))
+	if !ok || rec.Backend != "codex" {
+		t.Fatalf("should pin default codex, got %+v ok=%v", rec, ok)
+	}
+}
+
+func TestValidateDefaultBackend(t *testing.T) {
+	if err := ValidateDefaultBackend(""); err != nil {
+		t.Fatalf("empty should default to codex: %v", err)
+	}
+	if err := ValidateDefaultBackend("grok"); err != nil {
+		t.Fatalf("grok should be valid: %v", err)
+	}
+	if err := ValidateDefaultBackend("nope"); err == nil {
+		t.Fatal("expected error for unknown backend")
+	}
+}
