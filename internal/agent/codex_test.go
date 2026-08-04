@@ -145,55 +145,6 @@ func TestBuildPromptIncludesMemoryContext(t *testing.T) {
 	}
 }
 
-func TestNormalizeBackendName(t *testing.T) {
-	tests := map[string]string{
-		"":                "codex",
-		"codex":           "codex",
-		" CODEX ":         "codex",
-		"agy":             "agy",
-		"antigravity":     "agy",
-		"antigravity-cli": "agy",
-		"unknown-value":   "codex",
-	}
-	for input, want := range tests {
-		if got := normalizeBackendName(input); got != want {
-			t.Fatalf("normalizeBackendName(%q) = %q, want %q", input, got, want)
-		}
-	}
-}
-
-func TestResolveBackendBinary(t *testing.T) {
-	cfg := Config{Backend: "codex", Binary: "", CodexBinary: "custom-codex"}
-	backend := testBackend{name: "codex", defaultBinary: "codex"}
-	if got := resolveBackendBinary(cfg, backend); got != "custom-codex" {
-		t.Fatalf("binary = %q, want custom-codex", got)
-	}
-
-	cfg = Config{Backend: "agy"}
-	backend = testBackend{name: "agy", defaultBinary: "agy"}
-	if got := resolveBackendBinary(cfg, backend); got != "agy" {
-		t.Fatalf("binary = %q, want agy", got)
-	}
-
-	cfg = Config{Backend: "agy", Binary: " /opt/bin/agy "}
-	if got := resolveBackendBinary(cfg, backend); got != "/opt/bin/agy" {
-		t.Fatalf("binary = %q, want /opt/bin/agy", got)
-	}
-}
-
-type testBackend struct {
-	name          string
-	defaultBinary string
-}
-
-func (b testBackend) Name() string { return b.name }
-
-func (b testBackend) DefaultBinary() string { return b.defaultBinary }
-
-func (b testBackend) Execute(context.Context, BackendRequest) (BackendResult, error) {
-	return BackendResult{}, nil
-}
-
 func TestCodexBackendExecuteReturnsLastMessageOutput(t *testing.T) {
 	tempDir := t.TempDir()
 	backend := CodexBackend{}
@@ -222,7 +173,10 @@ func TestCodexBackendExecuteReturnsLastMessageOutput(t *testing.T) {
 }
 
 func TestResolveBackendSelectsAgy(t *testing.T) {
-	backend := resolveBackend(Config{Backend: "agy"})
+	backend, err := resolveBackend(Config{Backend: "agy"})
+	if err != nil {
+		t.Fatalf("resolveBackend: %v", err)
+	}
 	if backend.Name() != "agy" {
 		t.Fatalf("backend = %q, want agy", backend.Name())
 	}

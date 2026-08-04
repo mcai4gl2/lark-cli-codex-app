@@ -37,6 +37,7 @@ type Config struct {
 	Binary             string
 	Args               []string
 	CodexBinary        string
+	GrokBinary         string
 	Workspace          string
 	Model              string
 	AckText            string
@@ -132,7 +133,10 @@ func (r *Runner) run(entry inbound.LoggedEvent) {
 }
 
 func (r *Runner) execute(entry inbound.LoggedEvent) (string, error) {
-	backend := resolveBackend(r.cfg)
+	backend, err := resolveBackend(r.cfg)
+	if err != nil {
+		return "", err
+	}
 	tempDir, err := os.MkdirTemp("", "lark-agent-*")
 	if err != nil {
 		return "", fmt.Errorf("create temp dir: %w", err)
