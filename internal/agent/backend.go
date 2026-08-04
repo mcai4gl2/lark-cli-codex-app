@@ -35,6 +35,7 @@ type BackendRequest struct {
 var backends = map[string]Backend{
 	"codex": CodexBackend{},
 	"agy":   AgyBackend{},
+	"grok":  GrokBackend{},
 }
 
 var backendAliases = map[string]string{

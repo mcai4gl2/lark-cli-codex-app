@@ -18,10 +18,11 @@ func TestResolveRegisteredBackendsAndAliases(t *testing.T) {
 		{"agy", "agy", true},
 		{"antigravity", "agy", true},
 		{"antigravity-cli", "agy", true},
+		{"grok", "grok", true},
+		{"Grok", "grok", true},
 		{"", "", false},
 		{"unknown-value", "", false},
 		{"claude", "", false},
-		{"grok", "", false}, // registered in Task 3
 	}
 	for _, tc := range cases {
 		b, ok := Resolve(tc.in)
@@ -39,7 +40,7 @@ func TestResolveRegisteredBackendsAndAliases(t *testing.T) {
 
 func TestRegisteredBackendNamesSorted(t *testing.T) {
 	got := RegisteredBackendNames()
-	want := []string{"agy", "codex"}
+	want := []string{"agy", "codex", "grok"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("RegisteredBackendNames() = %#v, want %#v", got, want)
 	}
@@ -54,6 +55,9 @@ func TestBackendLabel(t *testing.T) {
 	}
 	if got := backendLabel("antigravity"); got != "本地 Antigravity/agy 执行代理" {
 		t.Fatalf("alias label = %q", got)
+	}
+	if got := backendLabel("grok"); got != "本地 Grok 执行代理" {
+		t.Fatalf("grok label = %q", got)
 	}
 	if got := backendLabel("nope"); got != "本地执行代理" {
 		t.Fatalf("unknown label = %q", got)
