@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.local.lark-cli-codex-app.weixin-gateway</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/YOUR_USERNAME/.local/bin/lark</string>
+    <string>weixin</string>
+    <string>gateway</string>
+    <string>serve</string>
+    <string>--agent</string>
+    <string>--memory</string>
+    <string>--agent-workspace</string>
+    <string>/Users/YOUR_USERNAME/WorkSpace</string>
+  </array>
+
+  <!-- The gateway reads credentials from <LARK_CONFIG_DIR>/weixin/accounts/,
+       written by `lark weixin login`. No token belongs in this file. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>LARK_CONFIG_DIR</key>
+    <string>/Users/YOUR_USERNAME/.lark</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/YOUR_USERNAME/WorkSpace</string>
+
+  <key>StandardOutPath</key>
+  <string>/Users/YOUR_USERNAME/.lark/weixin-gateway.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/YOUR_USERNAME/.lark/weixin-gateway.log</string>
+
+  <!-- SIGTERM lets the gateway send its notifystop before exiting. -->
+  <key>ExitTimeOut</key>
+  <integer>30</integer>
+</dict>
+</plist>

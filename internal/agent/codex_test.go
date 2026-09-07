@@ -927,3 +927,18 @@ func TestValidateDefaultBackend(t *testing.T) {
 		t.Fatal("expected error for unknown backend")
 	}
 }
+
+func TestProviderLabelWeixin(t *testing.T) {
+	cases := map[string]string{
+		"weixin": "微信",
+		"WeiXin": "微信",
+		"slack":  "Slack",
+		"lark":   "飞书",
+		"other":  "聊天平台",
+	}
+	for provider, want := range cases {
+		if got := providerLabel(provider); got != want {
+			t.Fatalf("providerLabel(%q) = %q, want %q", provider, got, want)
+		}
+	}
+}

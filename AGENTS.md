@@ -64,3 +64,25 @@ It is gated twice (the `integration` build tag and `CODEX_INTEGRATION_TEST=1`), 
 normal `go test ./...` never compiles or runs it. It never mutates `~/.codex` or runs any
 login/config command; if the env is not ready the `prerequisite` subtest skips with the
 error printed. See `plans/20260623_codex-integration-test.md`.
+
+## Documented exception: weixin integration test
+
+`internal/weixin/weixin_integration_test.go` (build tag `integration`) drives the real
+Weixin iLink service using the credentials stored by `lark weixin login`, which do not
+exist inside the `golang:1.24` container. It follows the same compile-in-Docker,
+run-on-host pattern:
+
+```bash
+docker run --rm -v "$PWD:/work" -w /work golang:1.24 \
+  go test -c -tags integration -o weixin_integration.test ./internal/weixin
+
+LARK_CONFIG_DIR=~/.lark WEIXIN_INTEGRATION_TEST=1 \
+  ./weixin_integration.test -test.v -test.run TestWeixinIntegration
+
+rm -f weixin_integration.test
+```
+
+It is gated twice (the `integration` build tag and `WEIXIN_INTEGRATION_TEST=1`). It reads
+the stored poll cursor but never writes it, never writes an account file, and never runs a
+login. Sending a real message is separately opt-in via `WEIXIN_INTEGRATION_TO=<user-id>`.
+See `plans/20260907_weixin-integration.md`.
