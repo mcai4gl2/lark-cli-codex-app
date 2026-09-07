@@ -197,6 +197,10 @@ requests for that account for one hour and logs the reason. Re-run
 
 ## Running as a service
 
+For the concrete local deployment (wrapper scripts, where credentials live, and
+how to back them up) see [codex-weixin-deployment.md](./codex-weixin-deployment.md).
+Version-controlled copies of the scripts live in `scripts/deploy/`.
+
 A systemd user unit (Linux):
 
 ```ini
