@@ -101,7 +101,7 @@ func init() {
 	gatewayServeCmd.Flags().StringVar(&gatewayEventLogPath, "event-log", "", "path to JSONL event log file")
 	gatewayServeCmd.Flags().StringVar(&gatewayAutoReplyText, "auto-reply-text", "", "optional plain-text auto-reply template; supports {{text}}, {{chat_id}}, {{message_id}}, {{sender_open_id}}")
 	gatewayServeCmd.Flags().BoolVar(&gatewayAgentEnabled, "agent", false, "dispatch inbound Feishu messages to local agent tasks")
-	gatewayServeCmd.Flags().StringVar(&gatewayAgentBackend, "agent-backend", "", "agent backend: codex, agy, or grok")
+	gatewayServeCmd.Flags().StringVar(&gatewayAgentBackend, "agent-backend", "", "agent backend: codex, agy, grok, or pi")
 	gatewayServeCmd.Flags().StringVar(&gatewayAgentBinary, "agent-binary", "", "agent backend binary path or command name")
 	gatewayServeCmd.Flags().StringVar(&gatewayAgentWorkspace, "agent-workspace", "", "workspace root used when the local agent executes tasks")
 	gatewayServeCmd.Flags().BoolVar(&gatewayDesktopWorker, "desktop-worker", false, "run the local desktop task worker inside the gateway process")

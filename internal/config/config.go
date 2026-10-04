@@ -79,6 +79,44 @@ type Config struct {
 			SessionResume  bool     `mapstructure:"session_resume"`
 		} `mapstructure:"agent"`
 	} `mapstructure:"slack"`
+	Weixin struct {
+		BaseURL    string `mapstructure:"base_url"`
+		CDNBaseURL string `mapstructure:"cdn_base_url"`
+		AppID      string `mapstructure:"app_id"`
+		BotType    string `mapstructure:"bot_type"`
+		BotAgent   string `mapstructure:"bot_agent"`
+		RouteTag   string `mapstructure:"route_tag"`
+		AccountID  string `mapstructure:"account_id"`
+		Gateway    struct {
+			EventLog               string   `mapstructure:"event_log"`
+			AutoReplyText          string   `mapstructure:"auto_reply_text"`
+			AllowFrom              []string `mapstructure:"allow_from"`
+			LongPollTimeoutSeconds int      `mapstructure:"long_poll_timeout_seconds"`
+			Typing                 bool     `mapstructure:"typing"`
+		} `mapstructure:"gateway"`
+		Memory struct {
+			Enabled                 bool   `mapstructure:"enabled"`
+			Root                    string `mapstructure:"root"`
+			MaxSectionChars         int    `mapstructure:"max_section_chars"`
+			IncludeThreadTranscript bool   `mapstructure:"include_thread_transcript"`
+			MaxTranscriptChars      int    `mapstructure:"max_transcript_chars"`
+			MaxTranscriptRecords    int    `mapstructure:"max_transcript_records"`
+		} `mapstructure:"memory"`
+		Agent struct {
+			Enabled        bool     `mapstructure:"enabled"`
+			Backend        string   `mapstructure:"backend"`
+			Binary         string   `mapstructure:"binary"`
+			Args           []string `mapstructure:"args"`
+			CodexBinary    string   `mapstructure:"codex_binary"`
+			GrokBinary     string   `mapstructure:"grok_binary"`
+			Workspace      string   `mapstructure:"workspace"`
+			Model          string   `mapstructure:"model"`
+			AckText        string   `mapstructure:"ack_text"`
+			ResultMaxChars int      `mapstructure:"result_max_chars"`
+			TimeoutMinutes int      `mapstructure:"timeout_minutes"`
+			SessionResume  bool     `mapstructure:"session_resume"`
+		} `mapstructure:"agent"`
+	} `mapstructure:"weixin"`
 	Webhook struct {
 		ListenAddr        string `mapstructure:"listen_addr"`
 		Path              string `mapstructure:"path"`
@@ -164,6 +202,33 @@ func Init() error {
 	viper.SetDefault("slack.agent.result_max_chars", 3500)
 	viper.SetDefault("slack.agent.timeout_minutes", 20)
 	viper.SetDefault("slack.agent.session_resume", false)
+	viper.SetDefault("weixin.base_url", "https://ilinkai.weixin.qq.com")
+	viper.SetDefault("weixin.cdn_base_url", "https://novac2c.cdn.weixin.qq.com/c2c")
+	viper.SetDefault("weixin.app_id", "bot")
+	viper.SetDefault("weixin.bot_type", "3")
+	viper.SetDefault("weixin.bot_agent", "")
+	viper.SetDefault("weixin.route_tag", "")
+	viper.SetDefault("weixin.account_id", "")
+	viper.SetDefault("weixin.gateway.event_log", filepath.Join(rootDir, ".weixin", "gateway-events.jsonl"))
+	viper.SetDefault("weixin.gateway.allow_from", []string{})
+	viper.SetDefault("weixin.gateway.long_poll_timeout_seconds", 35)
+	viper.SetDefault("weixin.gateway.typing", true)
+	viper.SetDefault("weixin.memory.enabled", false)
+	viper.SetDefault("weixin.memory.root", filepath.Join(rootDir, ".weixin", "conversations"))
+	viper.SetDefault("weixin.memory.max_section_chars", 2000)
+	viper.SetDefault("weixin.memory.include_thread_transcript", true)
+	viper.SetDefault("weixin.memory.max_transcript_chars", 8000)
+	viper.SetDefault("weixin.memory.max_transcript_records", 30)
+	viper.SetDefault("weixin.agent.enabled", false)
+	viper.SetDefault("weixin.agent.backend", "codex")
+	viper.SetDefault("weixin.agent.binary", "")
+	viper.SetDefault("weixin.agent.args", []string{})
+	viper.SetDefault("weixin.agent.codex_binary", "codex")
+	viper.SetDefault("weixin.agent.grok_binary", "grok")
+	viper.SetDefault("weixin.agent.ack_text", "")
+	viper.SetDefault("weixin.agent.result_max_chars", 3500)
+	viper.SetDefault("weixin.agent.timeout_minutes", 20)
+	viper.SetDefault("weixin.agent.session_resume", false)
 	viper.SetDefault("webhook.listen_addr", "0.0.0.0:8080")
 	viper.SetDefault("webhook.path", "/webhook/feishu")
 	viper.SetDefault("webhook.event_log", filepath.Join(cfgDir, "webhook-events.jsonl"))
@@ -216,6 +281,36 @@ func Init() error {
 	viper.BindEnv("slack.local_summarizer.max_tokens", "SLACK_LOCAL_SUMMARIZER_MAX_TOKENS")
 	viper.BindEnv("slack.local_summarizer.timeout_seconds", "SLACK_LOCAL_SUMMARIZER_TIMEOUT_SECONDS")
 	viper.BindEnv("slack.local_summarizer.min_chars", "SLACK_LOCAL_SUMMARIZER_MIN_CHARS")
+	viper.BindEnv("weixin.base_url", "WEIXIN_BASE_URL")
+	viper.BindEnv("weixin.cdn_base_url", "WEIXIN_CDN_BASE_URL")
+	viper.BindEnv("weixin.app_id", "WEIXIN_APP_ID")
+	viper.BindEnv("weixin.bot_type", "WEIXIN_BOT_TYPE")
+	viper.BindEnv("weixin.bot_agent", "WEIXIN_BOT_AGENT")
+	viper.BindEnv("weixin.route_tag", "WEIXIN_ROUTE_TAG")
+	viper.BindEnv("weixin.account_id", "WEIXIN_ACCOUNT_ID")
+	viper.BindEnv("weixin.gateway.event_log", "WEIXIN_GATEWAY_EVENT_LOG")
+	viper.BindEnv("weixin.gateway.auto_reply_text", "WEIXIN_GATEWAY_AUTO_REPLY_TEXT")
+	viper.BindEnv("weixin.gateway.allow_from", "WEIXIN_GATEWAY_ALLOW_FROM")
+	viper.BindEnv("weixin.gateway.long_poll_timeout_seconds", "WEIXIN_GATEWAY_LONG_POLL_TIMEOUT_SECONDS")
+	viper.BindEnv("weixin.gateway.typing", "WEIXIN_GATEWAY_TYPING")
+	viper.BindEnv("weixin.memory.enabled", "WEIXIN_MEMORY_ENABLED")
+	viper.BindEnv("weixin.memory.root", "WEIXIN_MEMORY_ROOT")
+	viper.BindEnv("weixin.memory.max_section_chars", "WEIXIN_MEMORY_MAX_SECTION_CHARS")
+	viper.BindEnv("weixin.memory.include_thread_transcript", "WEIXIN_MEMORY_INCLUDE_THREAD_TRANSCRIPT")
+	viper.BindEnv("weixin.memory.max_transcript_chars", "WEIXIN_MEMORY_MAX_TRANSCRIPT_CHARS")
+	viper.BindEnv("weixin.memory.max_transcript_records", "WEIXIN_MEMORY_MAX_TRANSCRIPT_RECORDS")
+	viper.BindEnv("weixin.agent.enabled", "WEIXIN_AGENT_ENABLED")
+	viper.BindEnv("weixin.agent.backend", "WEIXIN_AGENT_BACKEND")
+	viper.BindEnv("weixin.agent.binary", "WEIXIN_AGENT_BINARY")
+	viper.BindEnv("weixin.agent.args", "WEIXIN_AGENT_ARGS")
+	viper.BindEnv("weixin.agent.codex_binary", "WEIXIN_AGENT_CODEX_BINARY")
+	viper.BindEnv("weixin.agent.grok_binary", "WEIXIN_AGENT_GROK_BINARY")
+	viper.BindEnv("weixin.agent.workspace", "WEIXIN_AGENT_WORKSPACE")
+	viper.BindEnv("weixin.agent.model", "WEIXIN_AGENT_MODEL")
+	viper.BindEnv("weixin.agent.ack_text", "WEIXIN_AGENT_ACK_TEXT")
+	viper.BindEnv("weixin.agent.result_max_chars", "WEIXIN_AGENT_RESULT_MAX_CHARS")
+	viper.BindEnv("weixin.agent.timeout_minutes", "WEIXIN_AGENT_TIMEOUT_MINUTES")
+	viper.BindEnv("weixin.agent.session_resume", "WEIXIN_AGENT_SESSION_RESUME")
 	viper.BindEnv("webhook.listen_addr", "LARK_WEBHOOK_LISTEN")
 	viper.BindEnv("webhook.path", "LARK_WEBHOOK_PATH")
 	viper.BindEnv("webhook.verification_token", "LARK_WEBHOOK_TOKEN")
@@ -577,6 +672,221 @@ func GetAgentSessionResume() bool {
 // GetSlackAgentSessionResume returns whether Slack Codex session resume is enabled.
 func GetSlackAgentSessionResume() bool {
 	return viper.GetBool("slack.agent.session_resume")
+}
+
+// GetWeixinBaseURL returns the default Weixin iLink API host.
+func GetWeixinBaseURL() string {
+	url := strings.TrimSpace(viper.GetString("weixin.base_url"))
+	if url == "" {
+		return "https://ilinkai.weixin.qq.com"
+	}
+	return url
+}
+
+// GetWeixinCDNBaseURL returns the Weixin CDN host used for media transfer.
+func GetWeixinCDNBaseURL() string {
+	url := strings.TrimSpace(viper.GetString("weixin.cdn_base_url"))
+	if url == "" {
+		return "https://novac2c.cdn.weixin.qq.com/c2c"
+	}
+	return url
+}
+
+// GetWeixinAppID returns the iLink-App-Id header value.
+func GetWeixinAppID() string {
+	id := strings.TrimSpace(viper.GetString("weixin.app_id"))
+	if id == "" {
+		return "bot"
+	}
+	return id
+}
+
+// GetWeixinBotType returns the bot_type query value used during QR login.
+func GetWeixinBotType() string {
+	botType := strings.TrimSpace(viper.GetString("weixin.bot_type"))
+	if botType == "" {
+		return "3"
+	}
+	return botType
+}
+
+// GetWeixinBotAgent returns the optional bot_agent observability string.
+func GetWeixinBotAgent() string {
+	return strings.TrimSpace(viper.GetString("weixin.bot_agent"))
+}
+
+// GetWeixinRouteTag returns the optional SKRouteTag header value.
+func GetWeixinRouteTag() string {
+	return strings.TrimSpace(viper.GetString("weixin.route_tag"))
+}
+
+// GetWeixinAccountID returns the configured account override; empty selects the
+// most recently registered account.
+func GetWeixinAccountID() string {
+	return strings.TrimSpace(viper.GetString("weixin.account_id"))
+}
+
+// GetWeixinStateDir returns the directory holding Weixin accounts and state.
+func GetWeixinStateDir() string {
+	return filepath.Join(cfgDir, "weixin")
+}
+
+// GetWeixinGatewayEventLogPath returns the JSONL path for Weixin gateway persistence.
+func GetWeixinGatewayEventLogPath() string {
+	path := strings.TrimSpace(viper.GetString("weixin.gateway.event_log"))
+	if path == "" {
+		return filepath.Join(rootDir, ".weixin", "gateway-events.jsonl")
+	}
+	if !filepath.IsAbs(path) {
+		return filepath.Join(rootDir, path)
+	}
+	return path
+}
+
+// GetWeixinGatewayAutoReplyText returns the optional Weixin auto-reply text.
+func GetWeixinGatewayAutoReplyText() string {
+	return viper.GetString("weixin.gateway.auto_reply_text")
+}
+
+// GetWeixinGatewayAllowFrom returns the sender allow-list. An empty result means
+// the gateway falls back to the user ID recorded at QR login.
+func GetWeixinGatewayAllowFrom() []string {
+	return cleanStringSlice(viper.GetStringSlice("weixin.gateway.allow_from"), viper.GetString("weixin.gateway.allow_from"))
+}
+
+// GetWeixinGatewayLongPollTimeoutSeconds returns the client-side long-poll timeout.
+func GetWeixinGatewayLongPollTimeoutSeconds() int {
+	seconds := viper.GetInt("weixin.gateway.long_poll_timeout_seconds")
+	if seconds <= 0 {
+		return 35
+	}
+	return seconds
+}
+
+// GetWeixinGatewayTyping returns whether the typing indicator is driven around agent runs.
+func GetWeixinGatewayTyping() bool {
+	return viper.GetBool("weixin.gateway.typing")
+}
+
+// GetWeixinDesktopTaskRoot returns the Weixin-specific desktop queue root.
+func GetWeixinDesktopTaskRoot() string {
+	return filepath.Join(rootDir, ".weixin", "desktop-tasks")
+}
+
+// GetWeixinMemoryEnabled returns whether Weixin memory/audit folders are enabled.
+func GetWeixinMemoryEnabled() bool {
+	return viper.GetBool("weixin.memory.enabled")
+}
+
+// GetWeixinMemoryRoot returns the root directory for Weixin conversation memory.
+func GetWeixinMemoryRoot() string {
+	path := strings.TrimSpace(viper.GetString("weixin.memory.root"))
+	if path == "" {
+		return filepath.Join(rootDir, ".weixin", "conversations")
+	}
+	if !filepath.IsAbs(path) {
+		return filepath.Join(rootDir, path)
+	}
+	return path
+}
+
+// GetWeixinMemoryMaxSectionChars returns the per-section prompt context limit.
+func GetWeixinMemoryMaxSectionChars() int {
+	maxChars := viper.GetInt("weixin.memory.max_section_chars")
+	if maxChars <= 0 {
+		return 2000
+	}
+	return maxChars
+}
+
+// GetWeixinMemoryIncludeThreadTranscript returns whether transcript context is injected.
+func GetWeixinMemoryIncludeThreadTranscript() bool {
+	return viper.GetBool("weixin.memory.include_thread_transcript")
+}
+
+// GetWeixinMemoryMaxTranscriptChars returns the transcript prompt context limit.
+func GetWeixinMemoryMaxTranscriptChars() int {
+	maxChars := viper.GetInt("weixin.memory.max_transcript_chars")
+	if maxChars <= 0 {
+		return 8000
+	}
+	return maxChars
+}
+
+// GetWeixinMemoryMaxTranscriptRecords returns the transcript record limit.
+func GetWeixinMemoryMaxTranscriptRecords() int {
+	maxRecords := viper.GetInt("weixin.memory.max_transcript_records")
+	if maxRecords <= 0 {
+		return 30
+	}
+	return maxRecords
+}
+
+// GetWeixinAgentEnabled returns whether Weixin messages dispatch to a local agent.
+func GetWeixinAgentEnabled() bool {
+	return viper.GetBool("weixin.agent.enabled")
+}
+
+// GetWeixinAgentBackend returns the Weixin local agent backend name.
+func GetWeixinAgentBackend() string {
+	return strings.TrimSpace(viper.GetString("weixin.agent.backend"))
+}
+
+// GetWeixinAgentBinary returns the neutral Weixin local agent binary.
+func GetWeixinAgentBinary() string {
+	return strings.TrimSpace(viper.GetString("weixin.agent.binary"))
+}
+
+// GetWeixinAgentArgs returns extra arguments appended to the Weixin agent command.
+func GetWeixinAgentArgs() []string {
+	return cleanStringSlice(viper.GetStringSlice("weixin.agent.args"), viper.GetString("weixin.agent.args"))
+}
+
+// GetWeixinAgentCodexBinary returns the codex binary used for Weixin tasks.
+func GetWeixinAgentCodexBinary() string {
+	return strings.TrimSpace(viper.GetString("weixin.agent.codex_binary"))
+}
+
+// GetWeixinAgentGrokBinary returns the grok binary used for Weixin tasks.
+func GetWeixinAgentGrokBinary() string {
+	return strings.TrimSpace(viper.GetString("weixin.agent.grok_binary"))
+}
+
+// GetWeixinAgentWorkspace returns the workspace root used for Weixin agent tasks.
+func GetWeixinAgentWorkspace() string {
+	path := strings.TrimSpace(viper.GetString("weixin.agent.workspace"))
+	if path != "" {
+		if !filepath.IsAbs(path) {
+			return filepath.Join(rootDir, path)
+		}
+		return path
+	}
+	return GetAgentWorkspace()
+}
+
+// GetWeixinAgentModel returns the optional model override for Weixin agent tasks.
+func GetWeixinAgentModel() string {
+	return strings.TrimSpace(viper.GetString("weixin.agent.model"))
+}
+
+// GetWeixinAgentAckText returns the Weixin acknowledgement text.
+func GetWeixinAgentAckText() string {
+	return viper.GetString("weixin.agent.ack_text")
+}
+
+// GetWeixinAgentResultMaxChars returns the maximum Weixin reply length.
+func GetWeixinAgentResultMaxChars() int {
+	return viper.GetInt("weixin.agent.result_max_chars")
+}
+
+// GetWeixinAgentTimeoutMinutes returns the maximum runtime for a Weixin agent task.
+func GetWeixinAgentTimeoutMinutes() int {
+	return viper.GetInt("weixin.agent.timeout_minutes")
+}
+
+// GetWeixinAgentSessionResume returns whether Weixin agent session resume is enabled.
+func GetWeixinAgentSessionResume() bool {
+	return viper.GetBool("weixin.agent.session_resume")
 }
 
 // GetWebhookListenAddr returns the listen address for webhook server.

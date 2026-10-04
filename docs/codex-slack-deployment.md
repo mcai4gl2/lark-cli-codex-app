@@ -2,8 +2,10 @@
 
 This deployment runs the `lark` Slack Socket Mode gateway as a local background
 process for the generic Codex Chat Slack app. Slack sends DMs and channel
-mentions to the gateway, the gateway dispatches work to `codex exec`, and
-replies are posted back to the originating Slack thread.
+mentions to the gateway, the gateway dispatches work to the local `pi` CLI
+(`pi --print`), and replies are posted back to the originating Slack thread.
+Codex remains available per thread with a `/codex` prefix; this deployment's
+default backend is `pi`.
 
 ## Current Layout
 
@@ -37,6 +39,7 @@ paths, then starts:
 ```bash
 /home/ligeng/.local/bin/lark slack gateway serve \
   --agent \
+  --agent-backend pi \
   --memory \
   --memory-root "$HOME/CodexChat/.slack/conversations" \
   --agent-workspace "$HOME/CodexChat"
@@ -90,7 +93,7 @@ uses `conversations.replies` to catch up missed messages on startup or Socket
 Mode reconnect. In known participating threads, new user replies can continue
 the Codex task flow without mentioning the bot.
 
-The gateway adds an `eyes` processing reaction by default while Codex handles a
+The gateway adds an `eyes` processing reaction by default while Pi handles a
 Slack message. Configure it with `--processing-reaction` or
 `slack.gateway.processing_reaction`; set it to an empty value to disable
 processing reactions.
@@ -105,7 +108,7 @@ processing reactions.
 5. Confirm Slack receives the final reply.
 
 The first successful local smoke test received an `app_mention` event and
-recorded an outbound Codex reply in the thread audit log.
+recorded an outbound agent reply in the thread audit log.
 
 ## Notes
 
@@ -115,7 +118,9 @@ recorded an outbound Codex reply in the thread audit log.
   errors, agent dispatch errors, and wrapper exit status.
 - `gateway-events.jsonl` and conversation thread logs include raw Slack payloads
   and should be treated as private.
-- The gateway starts Codex in `/home/ligeng/CodexChat`; Slack requests should
+- The gateway starts Pi in `/home/ligeng/CodexChat`; Slack requests should
   mention a specific repository or path when the task is project-specific.
+- `~/.lark-codex-chat/config.yaml` sets `slack.agent.backend: pi`. The startup
+  script also passes `--agent-backend pi`, which overrides the config value.
 - Plain channel messages outside known participating threads are not scanned;
   mention the bot to start participation in a channel thread, or use a DM.

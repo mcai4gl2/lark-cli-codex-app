@@ -192,7 +192,7 @@ lark gateway serve \
   --agent-workspace ~/WorkSpace/project
 ```
 
-也可以在任意线程消息前加 `/codex`、`/agy` 或 `/grok` 前缀，按线程切换并固定后端。
+也可以在任意线程消息前加 `/codex`、`/agy`、`/grok` 或 `/pi` 前缀，按线程切换并固定后端。
 
 首次使用 `agy` 前建议先验证本机 CLI 的非交互输出：
 
@@ -260,6 +260,54 @@ lark desktop tasks fail --id <task-id> --error "why" --reply
 ```
 
 这是推荐的本地开发路径，因为它不需要公网 HTTPS tunnel。
+
+## Weixin（微信）模式
+
+微信前端和 Slack 前端功能对齐：用户在微信里和 bot 聊天，消息被派发给本地
+`codex` / `agy` / `grok`，结果回到同一个会话。传输方式是 HTTP 长轮询，不需要
+公网 callback URL，也没有 WebSocket。
+
+先用终端二维码绑定账号：
+
+```bash
+lark weixin login
+```
+
+用手机微信扫描终端里的二维码并确认。凭据写入 `<config dir>/weixin/accounts/`
+（权限 0600），并打印绑定的 `account_id` 与 `user_id`。绑定成功后再次执行
+`lark weixin login` 会提示"已连接过"，属于正常结果。
+
+然后启动网关：
+
+```bash
+lark weixin gateway serve \
+  --agent \
+  --memory \
+  --agent-workspace ~/WorkSpace
+```
+
+会话内可用指令：
+
+```text
+/reset     清空本会话的 agent 会话，下一条消息重新开始
+/status    查看当前后端、会话 id、工作目录
+/echo 文本  直接回显，不经过 agent
+/codex ... /agy ... /grok ... /pi ...   指定并固定本会话的后端
+```
+
+> ⚠️ **安全提示**：网关对每条被接受的消息都会以 `workspace-write` 权限运行本地
+> agent，而微信 bot 对任何能给它发消息的人都是可达的。发送者白名单
+> `weixin.gateway.allow_from` 就是这道边界，默认只包含扫码绑定时记录的
+> `user_id`；未配置白名单且没有绑定用户时网关会拒绝启动。设为 `["*"]` 才会接受
+> 所有人。详见 [docs/weixin-gateway.md](docs/weixin-gateway.md)。
+
+其他常用命令：
+
+```bash
+lark weixin accounts list
+lark weixin accounts remove <account-id>
+lark weixin msg send --to <user-id> --text "hello"
+```
 
 ## Webhook 模式
 

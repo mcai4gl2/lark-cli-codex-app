@@ -20,8 +20,8 @@ oauth:
 # Optional local task agent powered by a local coding backend.
 agent:
   enabled: false
-  # Agent backend: codex, agy, or grok. Defaults to codex.
-  # Overridable per thread via a leading /codex, /agy, or /grok message prefix.
+  # Agent backend: codex, agy, grok, or pi. Defaults to codex.
+  # Overridable per thread via a leading /codex, /agy, /grok, or /pi message prefix.
   backend: "codex"
   # Backend binary path or command name. Empty uses backend default.
   binary: ""
@@ -89,8 +89,8 @@ slack:
     min_chars: 300
   agent:
     enabled: false
-    # Agent backend: codex, agy, or grok. Defaults to codex.
-    # Overridable per thread via a leading /codex, /agy, or /grok message prefix.
+    # Agent backend: codex, agy, grok, or pi. Defaults to codex.
+    # Overridable per thread via a leading /codex, /agy, /grok, or /pi message prefix.
     backend: "codex"
     # Backend binary path or command name. Empty uses backend default.
     binary: ""
@@ -107,6 +107,73 @@ slack:
     timeout_minutes: 20
     # Resume Codex sessions across Slack thread messages instead of starting fresh.
     # Requires memory to be enabled (for the .state directory).
+    session_resume: false
+
+# Weixin (WeChat) settings
+# Credentials are bound with `lark weixin login` (terminal QR scan) and stored
+# under <config dir>/weixin/accounts/. Nothing here holds a token.
+#
+# SECURITY: the gateway executes the local agent (codex/agy/grok/pi) with
+# workspace-write on every message it accepts. A WeChat bot is reachable by
+# anyone who can message it, so `gateway.allow_from` is the containment
+# boundary. It defaults to the user ID captured at QR login; only an explicit
+# ["*"] opts out.
+weixin:
+  # iLink API host. Overridden per account by the baseurl returned at login.
+  base_url: "https://ilinkai.weixin.qq.com"
+  # CDN host used for inbound/outbound media transfer.
+  cdn_base_url: "https://novac2c.cdn.weixin.qq.com/c2c"
+  # iLink-App-Id header. Fixed by the official plugin; override only if the
+  # server-side contract changes.
+  app_id: "bot"
+  # bot_type query parameter used during QR login.
+  bot_type: "3"
+  # Optional UA-style Name/Version identity sent for server-side observability.
+  # Defaults to lark-cli/<version>.
+  bot_agent: ""
+  # Optional SKRouteTag header.
+  route_tag: ""
+  # Account to serve. Empty selects the most recently registered account.
+  account_id: ""
+  gateway:
+    # JSONL file that stores received message events.
+    event_log: ".weixin/gateway-events.jsonl"
+    # Optional plain-text auto-reply template.
+    # Supported placeholders: {{text}}, {{channel_id}}, {{message_id}}, {{user_id}}
+    auto_reply_text: ""
+    # Sender allow-list of Weixin user IDs. Empty falls back to the user ID
+    # recorded at QR login. Use ["*"] to accept every sender (not recommended).
+    allow_from: []
+    # Client-side long-poll timeout. The server may lower it per response.
+    long_poll_timeout_seconds: 35
+    # Show the WeChat typing indicator while an agent task is running.
+    typing: true
+  memory:
+    enabled: false
+    root: ".weixin/conversations"
+    max_section_chars: 2000
+    include_thread_transcript: true
+    max_transcript_chars: 8000
+    max_transcript_records: 30
+  agent:
+    enabled: false
+    # Agent backend: codex, agy, grok, or pi. Defaults to codex.
+    # Overridable per conversation via a leading /codex, /agy, /grok, or /pi prefix.
+    backend: "codex"
+    # Backend binary path or command name. Empty uses backend default.
+    binary: ""
+    # Extra backend-specific CLI args appended to the generated command.
+    args: []
+    codex_binary: "codex"
+    grok_binary: "grok"
+    workspace: "~/WorkSpace"
+    model: ""
+    ack_text: ""
+    result_max_chars: 3500
+    timeout_minutes: 20
+    # Resume agent sessions across messages in the same conversation.
+    # Requires memory to be enabled (for the .state directory).
+    # Use /reset in chat to drop the stored session.
     session_resume: false
 
 # Webhook settings for Feishu/Lark event subscriptions (optional)

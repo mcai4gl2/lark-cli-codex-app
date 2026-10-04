@@ -20,6 +20,8 @@ func TestResolveRegisteredBackendsAndAliases(t *testing.T) {
 		{"antigravity-cli", "agy", true},
 		{"grok", "grok", true},
 		{"Grok", "grok", true},
+		{"pi", "pi", true},
+		{" PI ", "pi", true},
 		{"", "", false},
 		{"unknown-value", "", false},
 		{"claude", "", false},
@@ -40,7 +42,7 @@ func TestResolveRegisteredBackendsAndAliases(t *testing.T) {
 
 func TestRegisteredBackendNamesSorted(t *testing.T) {
 	got := RegisteredBackendNames()
-	want := []string{"agy", "codex", "grok"}
+	want := []string{"agy", "codex", "grok", "pi"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("RegisteredBackendNames() = %#v, want %#v", got, want)
 	}
@@ -58,6 +60,9 @@ func TestBackendLabel(t *testing.T) {
 	}
 	if got := backendLabel("grok"); got != "本地 Grok 执行代理" {
 		t.Fatalf("grok label = %q", got)
+	}
+	if got := backendLabel("pi"); got != "本地 Pi 执行代理" {
+		t.Fatalf("pi label = %q", got)
 	}
 	if got := backendLabel("nope"); got != "本地执行代理" {
 		t.Fatalf("unknown label = %q", got)

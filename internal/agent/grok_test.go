@@ -75,7 +75,7 @@ func TestResolveGrok(t *testing.T) {
 		t.Fatalf("Resolve(grok) = %v ok=%v", b, ok)
 	}
 	names := RegisteredBackendNames()
-	if len(names) != 3 || names[0] != "agy" || names[1] != "codex" || names[2] != "grok" {
+	if len(names) != 4 || names[0] != "agy" || names[1] != "codex" || names[2] != "grok" || names[3] != "pi" {
 		t.Fatalf("names = %#v", names)
 	}
 }

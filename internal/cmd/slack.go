@@ -530,7 +530,7 @@ func init() {
 	slackGatewayServeCmd.Flags().StringVar(&slackGatewayEventLogPath, "event-log", "", "path to JSONL event log file")
 	slackGatewayServeCmd.Flags().StringVar(&slackGatewayAutoReplyText, "auto-reply-text", "", "optional plain-text auto-reply template; supports {{text}}, {{channel_id}}, {{message_id}}, {{user_id}}")
 	slackGatewayServeCmd.Flags().BoolVar(&slackGatewayAgentEnabled, "agent", false, "dispatch inbound Slack messages to local agent tasks")
-	slackGatewayServeCmd.Flags().StringVar(&slackGatewayAgentBackend, "agent-backend", "", "agent backend: codex, agy, or grok")
+	slackGatewayServeCmd.Flags().StringVar(&slackGatewayAgentBackend, "agent-backend", "", "agent backend: codex, agy, grok, or pi")
 	slackGatewayServeCmd.Flags().StringVar(&slackGatewayAgentBinary, "agent-binary", "", "agent backend binary path or command name")
 	slackGatewayServeCmd.Flags().StringVar(&slackGatewayAgentWorkspace, "agent-workspace", "", "workspace root used when the local agent executes tasks")
 	slackGatewayServeCmd.Flags().BoolVar(&slackGatewayDesktopWorker, "desktop-worker", false, "run the local desktop task worker inside the gateway process")

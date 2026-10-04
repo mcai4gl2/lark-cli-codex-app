@@ -70,7 +70,7 @@ Backend config:
 ```yaml
 agent:
   enabled: true
-  backend: "codex" # codex, agy, or grok
+  backend: "codex" # codex, agy, grok, or pi
   binary: ""       # empty uses backend default
   grok_binary: "grok"
   args: []
@@ -115,6 +115,52 @@ grok -p "Reply with exactly: grok-ok" --cwd "$PWD" --output-format plain --alway
 
 `codex_binary` is still accepted for older Codex-only configs, but new configs
 should use `backend`, `binary`, `grok_binary`, and `args`.
+
+### Weixin (WeChat)
+
+Bind a WeChat bot account with a terminal QR code, then run the long-poll
+gateway. See [docs/weixin-gateway.md](docs/weixin-gateway.md) for the full
+reference, including the security model.
+
+```bash
+# Bind an account (scan the printed QR code with the WeChat mobile app)
+./lark weixin login
+./lark weixin login --verbose --timeout 10m
+
+# Inspect and remove stored accounts
+./lark weixin accounts list
+./lark weixin accounts remove <account-id>
+
+# Run the gateway
+./lark weixin gateway serve --agent --agent-workspace ~/WorkSpace/project
+./lark weixin gateway serve --allow-from user-a@im.wechat --memory --media
+
+# Send a message manually (requires a recorded conversation context token)
+./lark weixin msg send --to <user-id> --text "hello"
+./lark weixin msg send --to <user-id> --text "report" --media ./report.pdf
+```
+
+Config:
+
+```yaml
+weixin:
+  gateway:
+    # Sender allow-list. Empty falls back to the user id captured at QR login;
+    # ["*"] accepts every sender.
+    allow_from: []
+    typing: true
+  agent:
+    enabled: true
+    backend: "codex" # codex, agy, grok, or pi
+    workspace: "~/WorkSpace/project"
+```
+
+WeChat has no threads, so a conversation is a single agent session. Use `/reset`
+in the chat to drop it, `/status` to inspect it, and the usual `/codex`,
+`/agy`, `/grok` prefixes to pin a backend.
+
+The gateway executes the local agent with `workspace-write` for every accepted
+message, so treat `allow_from` as a security boundary rather than a convenience.
 
 ### Authentication
 

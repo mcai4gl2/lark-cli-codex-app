@@ -77,4 +77,5 @@ func init() {
 	rootCmd.AddCommand(slackCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(webhookCmd)
+	rootCmd.AddCommand(weixinCmd)
 }

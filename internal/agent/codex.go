@@ -438,6 +438,8 @@ func providerLabel(provider string) string {
 		return "Slack"
 	case "lark":
 		return "飞书"
+	case "weixin":
+		return "微信"
 	default:
 		return "聊天平台"
 	}

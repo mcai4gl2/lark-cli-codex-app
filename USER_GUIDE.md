@@ -155,7 +155,7 @@ Optional agent configuration:
 
 ```bash
 export SLACK_AGENT_ENABLED=true
-export SLACK_AGENT_BACKEND="codex"   # codex, agy, or grok
+export SLACK_AGENT_BACKEND="codex"   # codex, agy, grok, or pi
 export SLACK_AGENT_BINARY=""         # empty uses backend default
 export SLACK_AGENT_ARGS=""           # comma-separated extra backend args
 export SLACK_AGENT_WORKSPACE="$HOME/WorkSpace"
@@ -725,7 +725,7 @@ Common flags:
 | Flag | Purpose |
 | --- | --- |
 | `--agent` | Dispatch Slack messages to the configured local agent backend. |
-| `--agent-backend NAME` | Agent backend: `codex`, `agy`, or `grok`. |
+| `--agent-backend NAME` | Agent backend: `codex`, `agy`, `grok`, or `pi`. |
 | `--agent-binary PATH` | Backend binary path or command name. |
 | `--agent-workspace PATH` | Workspace root used by agent tasks. |
 | `--memory` | Persist Slack audit logs and load explicit memory Markdown into prompts. |
