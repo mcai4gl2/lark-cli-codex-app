@@ -2,8 +2,9 @@
 
 This deployment runs the `lark` Weixin (WeChat) long-poll gateway as a local
 background process, alongside the existing Slack gateway. A user DMs the bot in
-WeChat, the gateway dispatches work to `codex exec`, and the reply is sent back
-into the same conversation.
+WeChat, the gateway dispatches work to the local `pi` CLI (`pi --print`), and
+the reply is sent back into the same conversation. Codex remains available per
+conversation with a `/codex` prefix; this deployment's default backend is `pi`.
 
 It mirrors [`codex-slack-deployment.md`](./codex-slack-deployment.md); see
 [`weixin-gateway.md`](./weixin-gateway.md) for the feature reference.
@@ -93,7 +94,8 @@ weixin:
     root: "/home/ligeng/CodexChat/.weixin/conversations"
   agent:
     enabled: true
-    backend: "codex"
+    backend: "pi"
+    binary: "/home/ligeng/.npm-global/bin/pi"
     workspace: "/home/ligeng/CodexChat"
     result_max_chars: 3500
     timeout_minutes: 20
@@ -112,7 +114,7 @@ of the box only the WeChat account that scanned the code can reach the agent.
 Everything else is dropped and logged.
 
 This matters more than on Slack: a WeChat bot is reachable by anyone who can
-message it, and every accepted message runs `codex` with `workspace-write` in
+message it, and every accepted message runs `pi` with tool access in
 `/home/ligeng/CodexChat`. Setting `allow_from: ["*"]` accepts every sender.
 The gateway refuses to start with neither an allow-list nor a bound user id.
 

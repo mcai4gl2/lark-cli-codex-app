@@ -39,6 +39,7 @@ fi
 gateway_cmd=(
   "$LARK_BIN" weixin gateway serve
   --agent \
+  --agent-backend pi \
   --memory \
   --memory-root "$HOME/CodexChat/.weixin/conversations" \
   --agent-workspace "$HOME/CodexChat"

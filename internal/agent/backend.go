@@ -36,6 +36,7 @@ var backends = map[string]Backend{
 	"codex": CodexBackend{},
 	"agy":   AgyBackend{},
 	"grok":  GrokBackend{},
+	"pi":    PiBackend{},
 }
 
 var backendAliases = map[string]string{
@@ -118,6 +119,8 @@ func backendLabel(name string) string {
 		return "本地 Antigravity/agy 执行代理"
 	case "grok":
 		return "本地 Grok 执行代理"
+	case "pi":
+		return "本地 Pi 执行代理"
 	default:
 		return "本地执行代理"
 	}

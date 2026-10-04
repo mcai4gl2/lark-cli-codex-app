@@ -229,7 +229,7 @@ var weixinGatewayServeCmd = &cobra.Command{
 	Long: `Run a local Weixin gateway.
 
 The gateway long-polls the Weixin iLink service for direct messages, dispatches
-them to the local agent (codex, agy, or grok), and sends the result back into
+them to the local agent (codex, agy, grok, or pi), and sends the result back into
 the conversation. No public HTTPS callback URL is required.
 
 SECURITY: every accepted message runs the agent with workspace-write. The
@@ -433,7 +433,7 @@ func init() {
 	weixinGatewayServeCmd.Flags().StringVar(&weixinGatewayEventLogPath, "event-log", "", "path to JSONL event log file")
 	weixinGatewayServeCmd.Flags().StringVar(&weixinGatewayAutoReplyText, "auto-reply-text", "", "optional plain-text auto-reply template; supports {{text}}, {{channel_id}}, {{message_id}}, {{user_id}}")
 	weixinGatewayServeCmd.Flags().BoolVar(&weixinGatewayAgentEnabled, "agent", false, "dispatch inbound Weixin messages to local agent tasks")
-	weixinGatewayServeCmd.Flags().StringVar(&weixinGatewayAgentBackend, "agent-backend", "", "agent backend: codex, agy, or grok")
+	weixinGatewayServeCmd.Flags().StringVar(&weixinGatewayAgentBackend, "agent-backend", "", "agent backend: codex, agy, grok, or pi")
 	weixinGatewayServeCmd.Flags().StringVar(&weixinGatewayAgentBinary, "agent-binary", "", "agent backend binary path or command name")
 	weixinGatewayServeCmd.Flags().StringVar(&weixinGatewayAgentWorkspace, "agent-workspace", "", "workspace root used when the local agent executes tasks")
 	weixinGatewayServeCmd.Flags().BoolVar(&weixinGatewayDesktopWorker, "desktop-worker", false, "run the local desktop task worker inside the gateway process")

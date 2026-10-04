@@ -70,7 +70,7 @@ Backend config:
 ```yaml
 agent:
   enabled: true
-  backend: "codex" # codex, agy, or grok
+  backend: "codex" # codex, agy, grok, or pi
   binary: ""       # empty uses backend default
   grok_binary: "grok"
   args: []
@@ -151,7 +151,7 @@ weixin:
     typing: true
   agent:
     enabled: true
-    backend: "codex" # codex, agy, or grok
+    backend: "codex" # codex, agy, grok, or pi
     workspace: "~/WorkSpace/project"
 ```
 

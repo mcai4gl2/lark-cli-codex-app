@@ -2,7 +2,7 @@
 
 The `lark weixin` commands add a WeChat front end alongside the Slack and Lark
 ones. A user chats with a bot in WeChat, the gateway dispatches each message to
-a local agent CLI (`codex`, `agy`, or `grok`), and the result is sent back into
+a local agent CLI (`codex`, `agy`, `grok`, or `pi`), and the result is sent back into
 the conversation.
 
 Unlike Slack Socket Mode, the WeChat transport is an HTTP **long poll**: the
@@ -72,7 +72,7 @@ Useful flags (all have `weixin.*` config equivalents):
 |---|---|
 | `--account` | account id to serve; empty uses the most recently registered one |
 | `--agent` | dispatch inbound messages to the local agent |
-| `--agent-backend` | `codex`, `agy`, or `grok` |
+| `--agent-backend` | `codex`, `agy`, `grok`, or `pi` |
 | `--agent-binary` | override the backend binary |
 | `--agent-workspace` | workspace root for agent tasks |
 | `--allow-from` | sender allow-list; overrides config. `*` accepts everyone |
@@ -94,7 +94,7 @@ shutdown, so stop it with `SIGINT`/`SIGTERM` (Ctrl-C) rather than `SIGKILL`.
 | `/reset` | drop the stored agent session for this conversation; the next message starts fresh |
 | `/status` | report the active backend, session id, workspace, and whether the agent is enabled |
 | `/echo <text>` | reply with the text, bypassing the agent |
-| `/codex …`, `/agy …`, `/grok …` | run this message on that backend and pin it for the conversation |
+| `/codex …`, `/agy …`, `/grok …`, `/pi …` | run this message on that backend and pin it for the conversation |
 | `/gui …` | queue a desktop GUI task instead of an agent run |
 
 WeChat has no threads, so a conversation is one long session. `/reset` plays the

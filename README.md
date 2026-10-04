@@ -192,7 +192,7 @@ lark gateway serve \
   --agent-workspace ~/WorkSpace/project
 ```
 
-也可以在任意线程消息前加 `/codex`、`/agy` 或 `/grok` 前缀，按线程切换并固定后端。
+也可以在任意线程消息前加 `/codex`、`/agy`、`/grok` 或 `/pi` 前缀，按线程切换并固定后端。
 
 首次使用 `agy` 前建议先验证本机 CLI 的非交互输出：
 
@@ -292,7 +292,7 @@ lark weixin gateway serve \
 /reset     清空本会话的 agent 会话，下一条消息重新开始
 /status    查看当前后端、会话 id、工作目录
 /echo 文本  直接回显，不经过 agent
-/codex ... /agy ... /grok ...   指定并固定本会话的后端
+/codex ... /agy ... /grok ... /pi ...   指定并固定本会话的后端
 ```
 
 > ⚠️ **安全提示**：网关对每条被接受的消息都会以 `workspace-write` 权限运行本地

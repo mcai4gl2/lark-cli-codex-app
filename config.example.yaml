@@ -20,8 +20,8 @@ oauth:
 # Optional local task agent powered by a local coding backend.
 agent:
   enabled: false
-  # Agent backend: codex, agy, or grok. Defaults to codex.
-  # Overridable per thread via a leading /codex, /agy, or /grok message prefix.
+  # Agent backend: codex, agy, grok, or pi. Defaults to codex.
+  # Overridable per thread via a leading /codex, /agy, /grok, or /pi message prefix.
   backend: "codex"
   # Backend binary path or command name. Empty uses backend default.
   binary: ""
@@ -89,8 +89,8 @@ slack:
     min_chars: 300
   agent:
     enabled: false
-    # Agent backend: codex, agy, or grok. Defaults to codex.
-    # Overridable per thread via a leading /codex, /agy, or /grok message prefix.
+    # Agent backend: codex, agy, grok, or pi. Defaults to codex.
+    # Overridable per thread via a leading /codex, /agy, /grok, or /pi message prefix.
     backend: "codex"
     # Backend binary path or command name. Empty uses backend default.
     binary: ""
@@ -113,7 +113,7 @@ slack:
 # Credentials are bound with `lark weixin login` (terminal QR scan) and stored
 # under <config dir>/weixin/accounts/. Nothing here holds a token.
 #
-# SECURITY: the gateway executes the local agent (codex/agy/grok) with
+# SECURITY: the gateway executes the local agent (codex/agy/grok/pi) with
 # workspace-write on every message it accepts. A WeChat bot is reachable by
 # anyone who can message it, so `gateway.allow_from` is the containment
 # boundary. It defaults to the user ID captured at QR login; only an explicit
@@ -157,8 +157,8 @@ weixin:
     max_transcript_records: 30
   agent:
     enabled: false
-    # Agent backend: codex, agy, or grok. Defaults to codex.
-    # Overridable per conversation via a leading /codex, /agy, or /grok prefix.
+    # Agent backend: codex, agy, grok, or pi. Defaults to codex.
+    # Overridable per conversation via a leading /codex, /agy, /grok, or /pi prefix.
     backend: "codex"
     # Backend binary path or command name. Empty uses backend default.
     binary: ""

@@ -23,7 +23,7 @@ type CommandContext struct {
 // HandleCommand runs the channel's own slash commands, which are answered
 // directly instead of being sent to the agent.
 //
-// Backend directives (/codex, /agy, /grok) are deliberately left alone: the
+// Backend directives (/codex, /agy, /grok, /pi) are deliberately left alone: the
 // agent runner parses those itself. Anything unrecognized returns handled=false
 // so it flows on to the desktop queue and then the agent.
 func HandleCommand(ctx context.Context, text string, cmdCtx CommandContext) (bool, error) {
@@ -97,7 +97,7 @@ func handleStatus(ctx context.Context, cmdCtx CommandContext) error {
 		fmt.Sprintf("会话: %s", sessionID),
 		fmt.Sprintf("工作目录: %s", workspace),
 		fmt.Sprintf("代理: %s", enabledLabel(cmdCtx.AgentEnabled)),
-		"可用指令: /reset /status /echo /codex /agy /grok",
+		"可用指令: /reset /status /echo /codex /agy /grok /pi",
 	}
 	return cmdCtx.reply(ctx, strings.Join(lines, "\n"))
 }

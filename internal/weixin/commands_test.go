@@ -52,7 +52,7 @@ func TestHandleCommandIgnoresNonCommands(t *testing.T) {
 func TestHandleCommandLeavesBackendDirectivesToTheAgent(t *testing.T) {
 	cmdCtx, _ := newCommandContext(t)
 	// The agent runner parses these itself; the channel must not eat them.
-	for _, text := range []string{"/codex fix the build", "/agy do it", "/grok explain"} {
+	for _, text := range []string{"/codex fix the build", "/agy do it", "/grok explain", "/pi inspect"} {
 		handled, err := HandleCommand(context.Background(), text, cmdCtx)
 		if err != nil {
 			t.Fatalf("HandleCommand(%q) error = %v", text, err)
